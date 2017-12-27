@@ -1,10 +1,12 @@
-from rl_algs.common.mpi_running_mean_std import RunningMeanStd
-import rl_algs.common.tf_util as U
+# from rl_algs.common.mpi_running_mean_std import RunningMeanStd
+from mpi_running_mean_std import RunningMeanStd
+# import rl_algs.common.tf_util as U
+import tf_util as U
 import tensorflow as tf
 import numpy as np
-import gym
-from rl_algs.common.distributions import CategoricalPdType
-
+# import gym
+# from rl_algs.common.distributions import CategoricalPdType
+from distributions import CategoricalPdType
 
 class Policy(object):
     def __init__(self, name, ob, ac_space, hid_size, num_hid_layers, num_subpolicies, gaussian_fixed_var=True):

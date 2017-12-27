@@ -30,9 +30,10 @@ def configure():
 
     # set up experiment
     config.experiment_dir = os.path.join("experiments/%s" % config.name)
-    assert not os.path.exists(config.experiment_dir), \
-            "Experiment %s already exists!" % config.experiment_dir
-    os.mkdir(config.experiment_dir)
+    # assert not os.path.exists(config.experiment_dir), \
+    #         "Experiment %s already exists!" % config.experiment_dir
+    if not os.path.exists(config.experiment_dir):
+        os.mkdir(config.experiment_dir)
 
     # set up logging
     log_name = os.path.join(config.experiment_dir, "run.log")

@@ -8,9 +8,8 @@ import numpy as np
 import yaml
 import tensorflow as tf
 
-# from policy_network import Policy
-# import rl_algs.common.tf_util as U
-# from rl_algs.common.tf_util import get_placeholder
+from policy_network import Policy
+import tf_util as U
 import logging
 
 N_ITERS = 3000000
@@ -25,19 +24,6 @@ import os
 import psutil
 process = psutil.Process(os.getpid())
 
-
-_PLACEHOLDER_CACHE = {}  # name -> (placeholder, dtype, shape)
-
-
-def get_placeholder(name, dtype, shape):
-    if name in _PLACEHOLDER_CACHE:
-        out, dtype1, shape1 = _PLACEHOLDER_CACHE[name]
-        assert dtype1 == dtype and shape1 == shape
-        return out
-    else:
-        out = tf.placeholder(dtype=dtype, shape=shape, name=name)
-        _PLACEHOLDER_CACHE[name] = (out, dtype, shape)
-        return out
 
 class CurriculumTrainer(object):
     def __init__(self, config, world, model):
@@ -82,13 +68,12 @@ class CurriculumTrainer(object):
                 self.test_tasks.append(task)
             self.task_index.index(task)
 
-        print ('subtask_index: ', self.subtask_index)
-        # model.prepare(world, self)
+        model.prepare(world, self)
 
-        # self.ob = get_placeholder(name="ob", dtype=tf.float32, shape=[None, ob_space.shape[0]])
-        self.ob = get_placeholder(name="ob", dtype=tf.float32, shape=[None, 10])
-        # self.policy = Policy(name="policy", ob=self.ob, ac_space=world.n_actions, hid_size=32, num_hid_layers=2, num_subpolicies=len(self.subtask_index))
-        # self.old_policy = Policy(name="old_policy", ob=self.ob, ac_space=world.n_actions, hid_size=32, num_hid_layers=2, num_subpolicies=len(self.subtask_index))
+        # self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, ob_space.shape[0]])
+        self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, len(self.subtask_index)])
+        self.policy = Policy(name="policy", ob=self.ob, ac_space=world.n_actions, hid_size=32, num_hid_layers=2, num_subpolicies=len(self.subtask_index))
+        self.old_policy = Policy(name="old_policy", ob=self.ob, ac_space=world.n_actions, hid_size=32, num_hid_layers=2, num_subpolicies=len(self.subtask_index))
 
     def do_rollout(self, model, world, possible_tasks, task_probs):
         states_before = []
@@ -233,7 +218,6 @@ class CurriculumTrainer(object):
 
     def train(self, model, world):
         model.prepare(world, self)
-        return
         #model.load()
         if self.config.trainer.use_curriculum:
             max_steps = 1
@@ -319,7 +303,7 @@ class CurriculumTrainer(object):
                 model.save()
 
     def transfer(self, model, world):
-        model.prepare(world, self)
+        # model.prepare(world, self)
         #model.load()
         i_iter = 0
 
