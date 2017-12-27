@@ -4,9 +4,14 @@ from worlds.cookbook import Cookbook
 
 from collections import defaultdict, namedtuple
 import itertools
-import logging
 import numpy as np
 import yaml
+import tensorflow as tf
+
+# from policy_network import Policy
+# import rl_algs.common.tf_util as U
+# from rl_algs.common.tf_util import get_placeholder
+import logging
 
 N_ITERS = 3000000
 N_UPDATE = 100
@@ -20,8 +25,22 @@ import os
 import psutil
 process = psutil.Process(os.getpid())
 
+
+_PLACEHOLDER_CACHE = {}  # name -> (placeholder, dtype, shape)
+
+
+def get_placeholder(name, dtype, shape):
+    if name in _PLACEHOLDER_CACHE:
+        out, dtype1, shape1 = _PLACEHOLDER_CACHE[name]
+        assert dtype1 == dtype and shape1 == shape
+        return out
+    else:
+        out = tf.placeholder(dtype=dtype, shape=shape, name=name)
+        _PLACEHOLDER_CACHE[name] = (out, dtype, shape)
+        return out
+
 class CurriculumTrainer(object):
-    def __init__(self, config):
+    def __init__(self, config, world, model):
         # load configs
         self.config = config
         self.cookbook = Cookbook(config.recipes)
@@ -63,7 +82,75 @@ class CurriculumTrainer(object):
                 self.test_tasks.append(task)
             self.task_index.index(task)
 
+        print ('subtask_index: ', self.subtask_index)
+        # model.prepare(world, self)
+
+        # self.ob = get_placeholder(name="ob", dtype=tf.float32, shape=[None, ob_space.shape[0]])
+        self.ob = get_placeholder(name="ob", dtype=tf.float32, shape=[None, 10])
+        # self.policy = Policy(name="policy", ob=self.ob, ac_space=world.n_actions, hid_size=32, num_hid_layers=2, num_subpolicies=len(self.subtask_index))
+        # self.old_policy = Policy(name="old_policy", ob=self.ob, ac_space=world.n_actions, hid_size=32, num_hid_layers=2, num_subpolicies=len(self.subtask_index))
+
     def do_rollout(self, model, world, possible_tasks, task_probs):
+        states_before = []
+        tasks = []
+        goal_names = []
+        goal_args = []
+
+        # choose tasks and initialize model
+        for _ in range(N_BATCH):
+            task = possible_tasks[self.random.choice(
+                len(possible_tasks), p=task_probs)]
+            goal, _ = task
+            goal_name, goal_arg = goal
+            scenario = world.sample_scenario_with_goal(goal_arg)
+            states_before.append(scenario.init())
+            tasks.append(task)
+            goal_names.append(goal_name)
+            goal_args.append(goal_arg)
+        model.init(states_before, tasks)
+        transitions = [[] for _ in range(N_BATCH)]
+
+        print ('states_before[0]: ', states_before[0])
+
+        # initialize timer
+        total_reward = 0.
+        timer = self.config.trainer.max_timesteps
+        done = [False for _ in range(N_BATCH)]
+
+        # act!
+        while not all(done) and timer > 0:
+            mstates_before = model.get_state()
+            action, terminate = model.act(states_before)
+            mstates_after = model.get_state()
+            states_after = [None for _ in range(N_BATCH)]
+            for i in range(N_BATCH):
+                if action[i] is None:
+                    assert done[i]
+                elif terminate[i]:
+                    win = states_before[i].satisfies(goal_names[i], goal_args[i])
+                    reward = 1 if win else 0
+                    states_after[i] = None
+                elif action[i] >= world.n_actions:
+                    states_after[i] = states_before[i]
+                    reward = 0
+                else:
+                    reward, states_after[i] = states_before[i].step(action[i])
+
+                if not done[i]:
+                    transitions[i].append(Transition(
+                            states_before[i], mstates_before[i], action[i], 
+                            states_after[i], mstates_after[i], reward))
+                    total_reward += reward
+
+                if terminate[i]:
+                    done[i] = True
+
+            states_before = states_after
+            timer -= 1
+
+        return transitions, total_reward / N_BATCH
+
+    def policy_do_rollout(self, model, world, possible_tasks, task_probs):
         states_before = []
         tasks = []
         goal_names = []
@@ -260,7 +347,7 @@ class CurriculumTrainer(object):
                     # get enough samples for one training step
                     while err is None:
                         i_iter += N_BATCH
-                        transitions, reward = self.do_rollout(model, world, 
+                        transitions, reward = self.policy_do_rollout(model, world, 
                                 possible_tasks, task_probs)
                         for t in transitions:
                             tr = sum(tt.r for tt in t)

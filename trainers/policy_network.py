@@ -4,7 +4,6 @@ import tensorflow as tf
 import numpy as np
 import gym
 from rl_algs.common.distributions import CategoricalPdType
-from rl_algs.common.mpi_running_mean_std import RunningMeanStd
 
 
 class Policy(object):
