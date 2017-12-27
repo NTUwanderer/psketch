@@ -71,10 +71,17 @@ class CurriculumTrainer(object):
         model.prepare(world, self)
 
         # self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, ob_space.shape[0]])
-        self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, len(self.subtask_index)])
+        self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, model.n_features])
         self.policy = Policy(name="policy", ob=self.ob, ac_space=world.n_actions, hid_size=32, num_hid_layers=2, num_subpolicies=len(self.subtask_index))
         self.old_policy = Policy(name="old_policy", ob=self.ob, ac_space=world.n_actions, hid_size=32, num_hid_layers=2, num_subpolicies=len(self.subtask_index))
+        self.stochastic = True
 
+        policy_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='policy')
+        old_policy_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='old_policy')
+        # print('not init: ', model.session.run(tf.report_uninitialized_variables()))
+        not_init_initializers = [var.initializer  for var in policy_vars + old_policy_vars]
+        model.session.run(not_init_initializers)
+        
     def do_rollout(self, model, world, possible_tasks, task_probs):
         states_before = []
         tasks = []
@@ -140,6 +147,10 @@ class CurriculumTrainer(object):
         tasks = []
         goal_names = []
         goal_args = []
+        subPolicies = [-1] * N_BATCH
+        rewards = [0] * N_BATCH
+        policies = [-1] * N_BATCH
+        policy_count = [0] * N_BATCH
 
         # choose tasks and initialize model
         for _ in range(N_BATCH):
@@ -155,6 +166,11 @@ class CurriculumTrainer(object):
         model.init(states_before, tasks)
         transitions = [[] for _ in range(N_BATCH)]
 
+        mstates_before = model.get_state()
+
+        for i in range(N_BATCH):
+            subPolicies[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i])
+
         # initialize timer
         total_reward = 0.
         timer = self.config.trainer.max_timesteps
@@ -162,36 +178,67 @@ class CurriculumTrainer(object):
 
         # act!
         while not all(done) and timer > 0:
-            mstates_before = model.get_state()
-            action, terminate = model.act(states_before)
+            print "states: ", states_before
+            action, terminateOfCurrentSub = model.policy_act(states_before, subPolicies)
             mstates_after = model.get_state()
             states_after = [None for _ in range(N_BATCH)]
             for i in range(N_BATCH):
+                shouldEnd = False
+                shouldChange = False
+                reward = 0
+
                 if action[i] is None:
                     assert done[i]
-                elif terminate[i]:
+                    continue
+                elif terminateOfCurrentSub[i]:
                     win = states_before[i].satisfies(goal_names[i], goal_args[i])
-                    reward = 1 if win else 0
-                    states_after[i] = None
-                elif action[i] >= world.n_actions:
-                    states_after[i] = states_before[i]
-                    reward = 0
+                    mstates_after = model.get_state()
+
+                    policy_count[i] += 1
+
+                    if policy_count[i] < self.config.trainer.max_policies and not win:
+                        reward = 0
+                        states_after[i] = states_before[i]
+                        shouldChange = True
+                    else:
+                        reward = 1 if win else 0
+                        states_after[i] = None
+                        shouldEnd = True
+
+                # elif action[i] >= world.n_actions:
+                #     states_after[i] = states_before[i]
+                #     reward = 0
                 else:
                     reward, states_after[i] = states_before[i].step(action[i])
 
-                if not done[i]:
+                rewards[i] += reward
+
+                if shouldChange:
+                    transitions[i].append(Transition(
+                            states_before[i], mstates_before[i], subPolicies[i], 
+                            states_after[i], mstates_after[i], rewards[i]))
+
+                    rewards[i] = 0
+                    mstates_before[i] = mstates_after[i]
+                    states_before[i] = states_after[i]
+                    subPolicies[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i])
+
+                if shouldEnd and not done[i]:
                     transitions[i].append(Transition(
                             states_before[i], mstates_before[i], action[i], 
-                            states_after[i], mstates_after[i], reward))
-                    total_reward += reward
+                            states_after[i], mstates_after[i], rewards[i]))
 
-                if terminate[i]:
                     done[i] = True
 
             states_before = states_after
             timer -= 1
 
         return transitions, total_reward / N_BATCH
+
+    def chooseSubPolicy(self, model, state, mstate):
+        with model.session.as_default():
+            cur_subpolicy, macro_vpred = self.policy.act(self.stochastic, model.featurize(state, mstate))
+            return cur_subpolicy
 
     def test(self, model, world):
         possible_tasks = self.test_tasks
@@ -333,15 +380,16 @@ class CurriculumTrainer(object):
                         i_iter += N_BATCH
                         transitions, reward = self.policy_do_rollout(model, world, 
                                 possible_tasks, task_probs)
-                        for t in transitions:
-                            tr = sum(tt.r for tt in t)
-                            task_rewards[t[0].m1.task] += tr
-                            task_counts[t[0].m1.task] += 1
-                        total_reward += reward
-                        count += 1
-                        for t in transitions:
-                            model.experience(t)
-                        err = model.train()
+                        # for t in transitions:
+                        #     tr = sum(tt.r for tt in t)
+                        #     task_rewards[t[0].m1.task] += tr
+                        #     task_counts[t[0].m1.task] += 1
+                        # total_reward += reward
+                        # count += 1
+                        # for t in transitions:
+                        #     model.experience(t)
+                        # err = model.train()
+                        err = 0
                     total_err += err
 
                 # log

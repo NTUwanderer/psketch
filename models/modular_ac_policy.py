@@ -267,6 +267,51 @@ class ModularACPolicyModel(object):
 
         return action, terminate
 
+    def policy_act(self, states, subtask_indices):
+        mstates = self.get_state()
+        self.i_step += 1
+        by_mod = defaultdict(list)
+        n_act_batch = len(self.i_subtask)
+
+        for i in range(n_act_batch):
+            by_mod[self.i_task[i], subtask_indices[i]].append(i)
+
+        action = [None] * n_act_batch
+        terminateOfCurrentSub = [None] * n_act_batch
+
+        for k, indices in by_mod.items():
+            i_task, subtask_index = k
+            assert len(set(subtask_indices[i] for i in indices)) == 1
+            if subtask_index >= len(self.actors):
+                print "Error: subtask_index too large: ", subtask_index
+                continue
+            elif subtask_index == -1:
+                continue
+
+            actor = self.actors[subtask_index]
+            feed_dict = {
+                self.inputs.t_feats: [self.featurize(states[i], mstates[i]) for i in indices],
+            }
+            if self.config.model.use_args:
+                feed_dict[self.inputs.t_arg] = [mstates[i].arg for i in indices]
+
+            logprobs = self.session.run([actor.t_probs], feed_dict=feed_dict)[0]
+            probs = np.exp(logprobs)
+            for pr, i in zip(probs, indices):
+
+                if self.i_step[i] >= self.config.model.max_subtask_timesteps:
+                    a = self.n_actions
+                else:
+                    a = self.randoms[i].choice(self.n_actions, p=pr)
+
+                if a >= self.world.n_actions:
+                    self.i_step[i] = 0.
+                t = a >= self.world.n_actions
+                action[i] = a
+                terminateOfCurrentSub[i] = t
+
+        return action, terminateOfCurrentSub
+
     def get_state(self):
         out = []
         for i in range(len(self.i_subtask)):

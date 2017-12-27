@@ -15,6 +15,7 @@ trainer:
   improvement_threshold: 0.8
   hints: "resources/craft/hints.policy.yaml"
   max_timesteps: 100
+  max_policies: 5
 
 #name: craft_transfer
 #recipes: "resources/craft/recipes.yaml"
