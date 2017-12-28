@@ -144,6 +144,7 @@ class CurriculumTrainer(object):
 
     def policy_do_rollout(self, model, world, possible_tasks, task_probs):
         states_before = []
+        states_before_master = []
         tasks = []
         goal_names = []
         goal_args = []
@@ -166,6 +167,7 @@ class CurriculumTrainer(object):
         model.init(states_before, tasks)
         transitions = [[] for _ in range(N_BATCH)]
 
+        states_before_master = states_before
         mstates_before = model.get_state()
 
         for i in range(N_BATCH):
@@ -178,7 +180,6 @@ class CurriculumTrainer(object):
 
         # act!
         while not all(done) and timer > 0:
-            print "states: ", states_before
             action, terminateOfCurrentSub = model.policy_act(states_before, subPolicies)
             mstates_after = model.get_state()
             states_after = [None for _ in range(N_BATCH)]
@@ -212,15 +213,16 @@ class CurriculumTrainer(object):
                     reward, states_after[i] = states_before[i].step(action[i])
 
                 rewards[i] += reward
+                total_reward += reward
 
                 if shouldChange:
                     transitions[i].append(Transition(
-                            states_before[i], mstates_before[i], subPolicies[i], 
+                            states_before_master[i], mstates_before[i], subPolicies[i], 
                             states_after[i], mstates_after[i], rewards[i]))
 
                     rewards[i] = 0
                     mstates_before[i] = mstates_after[i]
-                    states_before[i] = states_after[i]
+                    states_before_master[i] = states_after[i]
                     subPolicies[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i])
 
                 if shouldEnd and not done[i]:
@@ -228,6 +230,7 @@ class CurriculumTrainer(object):
                             states_before[i], mstates_before[i], action[i], 
                             states_after[i], mstates_after[i], rewards[i]))
 
+                    subPolicies[i] = -1
                     done[i] = True
 
             states_before = states_after
@@ -380,14 +383,14 @@ class CurriculumTrainer(object):
                         i_iter += N_BATCH
                         transitions, reward = self.policy_do_rollout(model, world, 
                                 possible_tasks, task_probs)
-                        # for t in transitions:
-                        #     tr = sum(tt.r for tt in t)
-                        #     task_rewards[t[0].m1.task] += tr
-                        #     task_counts[t[0].m1.task] += 1
-                        # total_reward += reward
-                        # count += 1
-                        # for t in transitions:
-                        #     model.experience(t)
+                        for t in transitions:
+                            tr = sum(tt.r for tt in t)
+                            task_rewards[t[0].m1.task] += tr
+                            task_counts[t[0].m1.task] += 1
+                        total_reward += reward
+                        count += 1
+                        for t in transitions:
+                            model.experience(t)
                         # err = model.train()
                         err = 0
                     total_err += err
