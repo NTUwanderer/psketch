@@ -3,7 +3,7 @@ import tensorflow as tf
 import logging
 
 from misc.experience import Transition
-import net
+from . import net
 
 DISCOUNT = 0.9
 #BATCH_SIZE = 1000

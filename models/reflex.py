@@ -1,4 +1,4 @@
-import net
+from . import net
 
 import numpy as np
 import tensorflow as tf

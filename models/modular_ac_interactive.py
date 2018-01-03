@@ -1,6 +1,6 @@
 from misc import util
-import net
-from reflex_meta import ReflexMetaModel
+from . import net
+from .reflex_meta import ReflexMetaModel
 
 from collections import namedtuple, defaultdict
 import logging

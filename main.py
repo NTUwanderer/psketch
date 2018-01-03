@@ -14,6 +14,8 @@ import tensorflow as tf
 import traceback
 import yaml
 
+sys.path.append('')
+
 def main():
     config = configure()
     world = worlds.load(config)
@@ -44,6 +46,7 @@ def configure():
         logging.exception("\n".join(traceback.format_exception(type, value, tb)))
     sys.excepthook = handler
 
+    print ('logging')
     logging.info("BEGIN")
     logging.info(str(config))
 

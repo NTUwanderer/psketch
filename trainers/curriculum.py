@@ -8,8 +8,8 @@ import numpy as np
 import yaml
 import tensorflow as tf
 
-from policy_network import Policy
-import tf_util as U
+from .policy_network import Policy
+from .rl_algs.common import tf_util as U
 import logging
 
 N_ITERS = 3000000
@@ -78,7 +78,6 @@ class CurriculumTrainer(object):
 
         policy_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='policy')
         old_policy_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='old_policy')
-        # print('not init: ', model.session.run(tf.report_uninitialized_variables()))
         not_init_initializers = [var.initializer  for var in policy_vars + old_policy_vars]
         model.session.run(not_init_initializers)
         
@@ -101,8 +100,6 @@ class CurriculumTrainer(object):
             goal_args.append(goal_arg)
         model.init(states_before, tasks)
         transitions = [[] for _ in range(N_BATCH)]
-
-        print ('states_before[0]: ', states_before[0])
 
         # initialize timer
         total_reward = 0.
@@ -359,8 +356,6 @@ class CurriculumTrainer(object):
 
         task_probs = []
         while i_iter < N_ITERS:
-            #print "before", process.memory_info().rss
-            #print "after", process.memory_info().rss
             min_reward = np.inf
 
             # TODO refactor

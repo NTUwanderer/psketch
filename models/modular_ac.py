@@ -1,5 +1,5 @@
 from misc import util
-import net
+from . import net
 
 from collections import namedtuple, defaultdict
 import logging

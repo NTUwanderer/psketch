@@ -1,5 +1,5 @@
 from misc import util
-import net
+from . import net
 
 from collections import namedtuple, defaultdict
 import logging
@@ -162,12 +162,13 @@ class ModularACPolicyModel(object):
         self.t_update_gradient_op = None
 
         params = []
-        for module in actors.values() + critics.values():
+        for module in list(actors.values()) + list(critics.values()):
             params += module.params
         self.saver = tf.train.Saver()
 
         self.session = tf.Session()
-        self.session.run(tf.initialize_all_variables())
+        # self.session.run(tf.initialize_all_variables())
+        self.session.run(tf.global_variables_initializer())
         self.session.run([actor.t_decrement_op for actor in actors.values()])
 
         self.actors = actors
@@ -283,7 +284,7 @@ class ModularACPolicyModel(object):
             i_task, subtask_index = k
             assert len(set(subtask_indices[i] for i in indices)) == 1
             if subtask_index >= len(self.actors):
-                print "Error: subtask_index too large: ", subtask_index
+                print ("Error: subtask_index too large: ", subtask_index)
                 continue
             elif subtask_index == -1:
                 continue

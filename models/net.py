@@ -8,9 +8,12 @@ def mlp(t_in, widths):
     prev_width = t_in.get_shape()[1]
     prev_layer = t_in
     for i_layer, width in enumerate(widths):
+        # v_w = tf.get_variable("w%d" % i_layer, shape=(prev_width, width),
+        #         initializer=tf.uniform_unit_scaling_initializer(
+        #             factor=RELU_SCALE))
         v_w = tf.get_variable("w%d" % i_layer, shape=(prev_width, width),
-                initializer=tf.uniform_unit_scaling_initializer(
-                    factor=RELU_SCALE))
+                initializer=tf.variance_scaling_initializer(
+                    scale=RELU_SCALE, distribution='uniform'))
         v_b = tf.get_variable("b%d" % i_layer, shape=(width,),
                 initializer=tf.constant_initializer(0.0))
         weights += [v_w, v_b]
