@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 from misc.util import Struct
 import models
@@ -8,6 +8,7 @@ import worlds
 import logging
 import numpy as np
 import os
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 import random
 import sys
 import tensorflow as tf
@@ -23,7 +24,8 @@ def main():
     trainer = trainers.load(config, world, model)
     #trainer.train(model, world)
     #trainer.test(model, world)
-    trainer.transfer(model, world)
+    with model.session.as_default():
+        trainer.transfer(model, world)
 
 def configure():
     # load config

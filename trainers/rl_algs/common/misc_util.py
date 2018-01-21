@@ -1,4 +1,4 @@
-import gym
+# import gym
 import numpy as np
 import os
 import pickle
@@ -154,15 +154,15 @@ class RunningAvg(object):
         return self._value
 
 
+"""
 class SimpleMonitor(gym.Wrapper):
     def __init__(self, env):
-        """Adds two qunatities to info returned by every step:
+        # Adds two qunatities to info returned by every step:
 
-            num_steps: int
-                Number of steps takes so far
-            rewards: [float]
-                All the cumulative rewards for the episodes completed so far.
-        """
+        #     num_steps: int
+        #         Number of steps takes so far
+        #     rewards: [float]
+        #         All the cumulative rewards for the episodes completed so far.
         super().__init__(env)
         # current episode state
         self._current_reward = None
@@ -221,6 +221,7 @@ class SimpleMonitor(gym.Wrapper):
         self._episode_rewards = ed['episode_rewards']
         self._episode_lengths = ed['episode_lengths']
         self._episode_end_times = ed['episode_end_times']
+"""
 
 
 def boolean_flag(parser, name, default=False, help=None):
@@ -241,22 +242,22 @@ def boolean_flag(parser, name, default=False, help=None):
     parser.add_argument("--no-" + name, action="store_false", dest=name)
 
 
+"""
 def get_wrapper_by_name(env, classname):
-    """Given an a gym environment possibly wrapped multiple times, returns a wrapper
-    of class named classname or raises ValueError if no such wrapper was applied
+    # Given an a gym environment possibly wrapped multiple times, returns a wrapper
+    # of class named classname or raises ValueError if no such wrapper was applied
 
-    Parameters
-    ----------
-    env: gym.Env of gym.Wrapper
-        gym environment
-    classname: str
-        name of the wrapper
+    # Parameters
+    # ----------
+    # env: gym.Env of gym.Wrapper
+    #     gym environment
+    # classname: str
+    #     name of the wrapper
 
-    Returns
-    -------
-    wrapper: gym.Wrapper
-        wrapper named classname
-    """
+    # Returns
+    # -------
+    # wrapper: gym.Wrapper
+    #     wrapper named classname
     currentenv = env
     while True:
         if classname == currentenv.class_name():
@@ -265,6 +266,7 @@ def get_wrapper_by_name(env, classname):
             currentenv = currentenv.env
         else:
             raise ValueError("Couldn't find wrapper named %s" % classname)
+"""
 
 
 def relatively_safe_pickle_dump(obj, path, compression=False):

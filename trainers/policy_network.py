@@ -50,11 +50,12 @@ class Policy(object):
         return tf.get_collection(tf.GraphKeys.VARIABLES, self.scope)
     def get_trainable_variables(self):
         return tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, self.scope)
-    def reset(self):
+    def reset(self, sess):
         with tf.variable_scope(self.scope, reuse=True):
             varlist = self.get_trainable_variables()
             initializer = tf.variables_initializer(varlist)
-            U.get_session().run(initializer)
+            # U.get_session().run(initializer)
+            sess.run(initializer)
 
     # debug
     def act_forced(self, stochastic, ob, policy):
