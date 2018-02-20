@@ -91,13 +91,14 @@ def traj_segment_generator(pi, sub_policies, env, macrolen, horizon, stochastic,
         t += 1
 
 # TODO
-def add_advantage_macro(rewards, macro_vpred, macrolen, num_macro_acts, gamma, lam):
+def add_advantage_macro(rewards, macro_vpred, macrolen, gamma, lam):
     # new = np.append(seg["new"][0::macrolen], 0) # last element is only used for last vtarg, but we already zeroed it if last new = 1
     # print ('seg[new]: ', seg["new"])
     # print ('seg[new][0::macrolen]: ', seg["new"][0::macrolen])
 
     vpred = np.append(macro_vpred, 0)
     # T = int(len(seg["rew"])/macrolen)
+    num_macro_acts = len(macro_vpred)
     T = num_macro_acts
     # seg["macro_adv"] = gaelam = np.empty(T, 'float32')
     macro_adv = np.empty(num_macro_acts, 'float32')

@@ -8,7 +8,7 @@ import worlds
 import logging
 import numpy as np
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]=""
 import random
 import sys
 import tensorflow as tf

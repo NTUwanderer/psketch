@@ -114,6 +114,7 @@ class CurriculumTrainer(object):
         done = [False for _ in range(N_BATCH)]
 
         # act!
+        # mstates should be useless
         while not all(done) and timer > 0:
             mstates_before = model.get_state()
             action, terminate = model.act(states_before)
@@ -177,6 +178,8 @@ class CurriculumTrainer(object):
 
         for i in range(N_BATCH):
             subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i])
+            if np.random.uniform() < 0.1:
+                subPolicies[i] = np.random.randint(0, len(self.subtask_index))
 
         # initialize timer
         total_reward = 0.
@@ -229,6 +232,8 @@ class CurriculumTrainer(object):
                     mstates_before[i] = mstates_after[i]
                     states_before_master[i] = states_after[i]
                     subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i])
+                    if np.random.uniform() < 0.1:
+                        subPolicies[i] = np.random.randint(0, len(self.subtask_index))
 
                 if shouldEnd and not done[i]:
                     transitions[i].append(MacroTransition(
@@ -411,7 +416,7 @@ class CurriculumTrainer(object):
                                 macro_obs.append(model.featurize(tt.s1, tt.m1)) ## state, mstate
                                 macro_acts.append(tt.a)
 
-                            macro_adv, macro_tdlamret = add_advantage_macro(r, vpred, self.config.model.max_subtask_timesteps, self.config.trainer.max_policies, 0.99, 0.98)
+                            macro_adv, macro_tdlamret = add_advantage_macro(r, vpred, self.config.model.max_subtask_timesteps, 0.99, 0.98)
 
                             ep_lens.append(len(t))
                             ep_rets.append(sum(r))
@@ -452,9 +457,12 @@ class CurriculumTrainer(object):
                             score)
                     scores.append(score)
                 logging.info("")
-                logging.info("[rollout0] %s", [t.m1.action for t in transitions[0]])
-                logging.info("[rollout1] %s", [t.m1.action for t in transitions[1]])
-                logging.info("[rollout2] %s", [t.m1.action for t in transitions[2]])
+                # logging.info("[rollout0] %s", [t.m1.action for t in transitions[0]])
+                # logging.info("[rollout1] %s", [t.m1.action for t in transitions[1]])
+                # logging.info("[rollout2] %s", [t.m1.action for t in transitions[2]])
+                logging.info("[rollout0] %s", [t.a for t in transitions[0]])
+                logging.info("[rollout1] %s", [t.a for t in transitions[1]])
+                logging.info("[rollout2] %s", [t.a for t in transitions[2]])
                 logging.info("[reward] %s", total_reward / count)
                 logging.info("[error] %s", err / N_UPDATE)
                 logging.info("")

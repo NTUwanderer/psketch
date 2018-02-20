@@ -218,7 +218,7 @@ class ModularACPolicyModel(object):
                 self.experiences.append(n_transition)
 
     def featurize(self, state, mstate):
-        if self.config.model.featurize_plan:
+        if self.config.model.featurize_plan: # false
             task_features = np.zeros((self.max_task_steps, self.n_modules))
             for i, m in enumerate(self.trainer.task_index.get(mstate.task).steps):
                 task_features[i, m] = 1
