@@ -166,7 +166,10 @@ class ModularACPolicyModel(object):
             params += module.params
         self.saver = tf.train.Saver()
 
-        self.session = tf.Session()
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth=True
+
+        self.session = tf.Session(config=config)
         # self.session.run(tf.initialize_all_variables())
         self.session.run(tf.global_variables_initializer())
         self.session.run([actor.t_decrement_op for actor in actors.values()])
@@ -245,7 +248,8 @@ class ModularACPolicyModel(object):
                 continue
             actor = self.actors[self.subtasks[indices[0]][i_subtask]]
             feed_dict = {
-                self.inputs.t_feats: [self.featurize(states[i], mstates[i]) for i in indices],
+                # self.inputs.t_feats: [self.featurize(states[i], mstates[i]) for i in indices],
+                self.inputs.t_feats: [states[i].features() for i in indices],
             }
             if self.config.model.use_args:
                 feed_dict[self.inputs.t_arg] = [mstates[i].arg for i in indices]

@@ -8,7 +8,7 @@ import worlds
 import logging
 import numpy as np
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]=""
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 import random
 import sys
 import tensorflow as tf
@@ -23,9 +23,9 @@ def main():
     model = models.load(config)
     trainer = trainers.load(config, world, model)
     #trainer.train(model, world)
-    #trainer.test(model, world)
-    with model.session.as_default():
-        trainer.transfer(model, world)
+    trainer.test(model, world)
+    #with model.session.as_default():
+        #trainer.transfer(model, world)
 
 def configure():
     # load config

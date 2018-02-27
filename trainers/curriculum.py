@@ -1,5 +1,5 @@
 from misc import util
-from misc.experience import MacroTransition
+from misc.experience import Transition, MacroTransition
 from worlds.cookbook import Cookbook
 
 from collections import defaultdict, namedtuple
@@ -70,22 +70,25 @@ class CurriculumTrainer(object):
                 self.test_tasks.append(task)
             self.task_index.index(task)
 
+            print ('task: ', hint_key, task)
+
         model.prepare(world, self)
 
         # self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, ob_space.shape[0]])
+
         self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, model.n_features])
-        self.policy = Policy(name="policy", ob=self.ob, ac_space=world.n_actions, hid_size=32, num_hid_layers=2, num_subpolicies=len(self.subtask_index))
-        self.old_policy = Policy(name="old_policy", ob=self.ob, ac_space=world.n_actions, hid_size=32, num_hid_layers=2, num_subpolicies=len(self.subtask_index))
-        self.stochastic = True
+        # self.policy = Policy(name="policy", ob=self.ob, ac_space=world.n_actions, hid_size=32, num_hid_layers=2, num_subpolicies=len(self.subtask_index))
+        # self.old_policy = Policy(name="old_policy", ob=self.ob, ac_space=world.n_actions, hid_size=32, num_hid_layers=2, num_subpolicies=len(self.subtask_index))
+        # self.stochastic = True
 
-        policy_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='policy')
-        old_policy_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='old_policy')
-        not_init_initializers = [var.initializer  for var in policy_vars + old_policy_vars]
-        model.session.run(not_init_initializers)
+        # policy_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='policy')
+        # old_policy_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='old_policy')
+        # not_init_initializers = [var.initializer  for var in policy_vars + old_policy_vars]
+        # model.session.run(not_init_initializers)
 
-        self.policy.reset(model.session)
-        with model.session.as_default() as sess:
-            self.learner = Learner(self.policy, self.old_policy, len(self.subtask_index), None, clip_param=0.2, entcoeff=0, optim_epochs=10, optim_stepsize=3e-5, optim_batchsize=64)
+        # self.policy.reset(model.session)
+        # with model.session.as_default() as sess:
+        #     self.learner = Learner(self.policy, self.old_policy, len(self.subtask_index), None, clip_param=0.2, entcoeff=0, optim_epochs=10, optim_stepsize=3e-5, optim_batchsize=64)
         # self.learner.syncMasterPolicies()
         
     def do_rollout(self, model, world, possible_tasks, task_probs):
@@ -114,7 +117,6 @@ class CurriculumTrainer(object):
         done = [False for _ in range(N_BATCH)]
 
         # act!
-        # mstates should be useless
         while not all(done) and timer > 0:
             mstates_before = model.get_state()
             action, terminate = model.act(states_before)
@@ -159,6 +161,8 @@ class CurriculumTrainer(object):
         policies = [-1] * N_BATCH
         policy_count = [0] * N_BATCH
 
+        targetSteps = [2, 6, 5, 3]
+
         # choose tasks and initialize model
         for _ in range(N_BATCH):
             task = possible_tasks[self.random.choice(
@@ -178,8 +182,9 @@ class CurriculumTrainer(object):
 
         for i in range(N_BATCH):
             subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i])
-            if np.random.uniform() < 0.1:
-                subPolicies[i] = np.random.randint(0, len(self.subtask_index))
+            # if np.random.uniform() < 0.1:
+            #     subPolicies[i] = np.random.randint(0, len(self.subtask_index))
+            subPolicies[i] = targetSteps[policy_count[i]]
 
         # initialize timer
         total_reward = 0.
@@ -187,6 +192,7 @@ class CurriculumTrainer(object):
         done = [False for _ in range(N_BATCH)]
 
         # act!
+        # mstates should be useless
         while not all(done) and timer > 0:
             action, terminateOfCurrentSub = model.policy_act(states_before, subPolicies)
             mstates_after = model.get_state()
@@ -231,9 +237,11 @@ class CurriculumTrainer(object):
                     rewards[i] = 0
                     mstates_before[i] = mstates_after[i]
                     states_before_master[i] = states_after[i]
+
                     subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i])
-                    if np.random.uniform() < 0.1:
-                        subPolicies[i] = np.random.randint(0, len(self.subtask_index))
+                    # if np.random.uniform() < 0.1:
+                    #     subPolicies[i] = np.random.randint(0, len(self.subtask_index))
+                    subPolicies[i] = targetSteps[policy_count[i]]
 
                 if shouldEnd and not done[i]:
                     transitions[i].append(MacroTransition(
@@ -250,10 +258,15 @@ class CurriculumTrainer(object):
             states_before = states_after
             timer -= 1
 
+        if total_reward != sum(rewards):
+            print ('Rewards didn\'t match')
+
         return transitions, total_reward / N_BATCH
 
     def chooseSubPolicy(self, model, state, mstate):
-        cur_subpolicy, macro_vpred = self.policy.act(self.stochastic, model.featurize(state, mstate))
+        # cur_subpolicy, macro_vpred = self.policy.act(self.stochastic, model.featurize(state, mstate))
+        cur_subpolicy = 0
+        macro_vpred = 0
         return cur_subpolicy, macro_vpred
 
     def test(self, model, world):
@@ -280,7 +293,7 @@ class CurriculumTrainer(object):
                     score)
 
     def train(self, model, world):
-        model.prepare(world, self)
+        #model.prepare(world, self)
         #model.load()
         if self.config.trainer.use_curriculum:
             max_steps = 1
@@ -377,7 +390,8 @@ class CurriculumTrainer(object):
 
             
             if i_iter % syncRound == 0:
-                self.learner.syncMasterPolicies()
+                # self.learner.syncMasterPolicies()
+                pass
             # TODO refactor
             for _ in range(1):
                 possible_tasks = self.test_tasks
@@ -432,7 +446,7 @@ class CurriculumTrainer(object):
                         macro_advs = np.array(macro_advs)
                         macro_tdlamrets = np.array(macro_tdlamrets)
 
-                        gmean, lmean = self.learner.updateMasterPolicy(ep_lens, ep_rets, macro_obs, macro_acts, macro_advs, macro_tdlamrets)
+                        # gmean, lmean = self.learner.updateMasterPolicy(ep_lens, ep_rets, macro_obs, macro_acts, macro_advs, macro_tdlamrets)
 
                         total_reward += reward
                         count += 1
@@ -450,7 +464,7 @@ class CurriculumTrainer(object):
                 for i, task in enumerate(possible_tasks):
                     i_task = self.task_index[task]
                     score = 1. * task_rewards[i_task] / task_counts[i_task]
-                    logging.info("[task] %s[%s] %s %s", 
+                    logging.info("[task] %s[%s], prob: %s, score: %s", 
                             self.subtask_index.get(task.goal[0]),
                             self.cookbook.index.get(task.goal[1]),
                             task_probs[i],
