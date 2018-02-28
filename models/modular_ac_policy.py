@@ -43,6 +43,12 @@ class ModularACPolicyModel(object):
 
     def prepare(self, world, trainer):
         assert self.world is None
+
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth=True
+
+        self.session = tf.Session(config=config)
+
         self.world = world
         self.trainer = trainer
 
@@ -166,7 +172,6 @@ class ModularACPolicyModel(object):
             params += module.params
         self.saver = tf.train.Saver()
 
-        self.session = tf.Session()
         # self.session.run(tf.initialize_all_variables())
         self.session.run(tf.global_variables_initializer())
         self.session.run([actor.t_decrement_op for actor in actors.values()])
