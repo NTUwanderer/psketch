@@ -181,7 +181,7 @@ class CurriculumTrainer(object):
 
         for i in range(N_BATCH):
             subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i])
-            if np.random.uniform() < 0.1:
+            if np.random.uniform() < self.config.trainer.random_prob:
                 subPolicies[i] = np.random.randint(0, len(self.subtask_index))
 
         # initialize timer
@@ -235,7 +235,7 @@ class CurriculumTrainer(object):
                     mstates_before[i] = mstates_after[i]
                     states_before_master[i] = states_after[i]
                     subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i])
-                    if np.random.uniform() < 0.1:
+                    if np.random.uniform() < self.config.trainer.random_prob:
                         subPolicies[i] = np.random.randint(0, len(self.subtask_index))
 
                 if shouldEnd and not done[i]:
