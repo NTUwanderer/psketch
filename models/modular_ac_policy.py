@@ -182,7 +182,7 @@ class ModularACPolicyModel(object):
         self.critic_trainers = critic_trainers
         self.inputs = InputBundle(t_arg, t_step, t_feats, t_action_mask, t_reward)
 
-        self.saver.restore(self.session, "experiments/craft_holdout/modular_ac.chk")
+        # self.saver.restore(self.session, "experiments/craft_holdout/modular_ac.chk")
 
     def init(self, states, tasks):
         n_act_batch = len(states)
@@ -210,9 +210,10 @@ class ModularACPolicyModel(object):
                 os.path.join(self.config.experiment_dir, "modular_ac.chk"))
 
     def load(self):
-        path = os.path.join(self.config.experiment_dir, "modular_ac.chk")
-        logging.info("loaded %s", path)
-        self.saver.restore(self.session, path)
+        self.saver.restore(self.session, "experiments/craft_holdout/modular_ac.chk")
+        # path = os.path.join(self.config.experiment_dir, "modular_ac.chk")
+        # logging.info("loaded %s", path)
+        # self.saver.restore(self.session, path)
 
     def experience(self, episode):
         running_reward = 0

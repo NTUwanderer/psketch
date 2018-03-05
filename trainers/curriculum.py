@@ -1,5 +1,5 @@
 from misc import util
-from misc.experience import MacroTransition
+from misc.experience import Transition, MacroTransition
 from worlds.cookbook import Cookbook
 
 from collections import defaultdict, namedtuple
@@ -73,6 +73,8 @@ class CurriculumTrainer(object):
                 self.test_tasks.append(task)
             self.task_index.index(task)
 
+            print (hint_key, hint, task)
+
         model.prepare(world, self)
 
         # self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, ob_space.shape[0]])
@@ -89,6 +91,8 @@ class CurriculumTrainer(object):
         self.policy.reset(model.session)
         with model.session.as_default() as sess:
             self.learner = Learner(self.policy, self.old_policy, len(self.subtask_index), None, clip_param=0.2, entcoeff=0, optim_epochs=10, optim_stepsize=3e-5, optim_batchsize=64)
+
+        model.load()
         # self.learner.syncMasterPolicies()
         
     def do_rollout(self, model, world, possible_tasks, task_probs):
@@ -162,6 +166,8 @@ class CurriculumTrainer(object):
         policies = [-1] * N_BATCH
         policy_count = [0] * N_BATCH
 
+        targetSteps = [4, 5, 2, 6]
+
         # choose tasks and initialize model
         for _ in range(N_BATCH):
             task = possible_tasks[self.random.choice(
@@ -183,6 +189,7 @@ class CurriculumTrainer(object):
             subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i])
             if np.random.uniform() < self.config.trainer.random_prob:
                 subPolicies[i] = np.random.randint(0, len(self.subtask_index))
+                # subPolicies[i] = targetSteps[policy_count[i]]
 
         # initialize timer
         total_reward = 0.
@@ -237,6 +244,7 @@ class CurriculumTrainer(object):
                     subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i])
                     if np.random.uniform() < self.config.trainer.random_prob:
                         subPolicies[i] = np.random.randint(0, len(self.subtask_index))
+                        # subPolicies[i] = targetSteps[policy_count[i]]
 
                 if shouldEnd and not done[i]:
                     transitions[i].append(MacroTransition(
