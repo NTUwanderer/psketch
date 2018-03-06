@@ -481,3 +481,5 @@ class CurriculumTrainer(object):
 
             logging.info("[min reward] %s", min_reward)
             logging.info("")
+
+            model.save()
