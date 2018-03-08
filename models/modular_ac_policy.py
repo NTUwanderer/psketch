@@ -210,10 +210,10 @@ class ModularACPolicyModel(object):
                 os.path.join(self.config.experiment_dir, "modular_ac.chk"))
 
     def load(self):
-        self.saver.restore(self.session, "experiments/craft_holdout/modular_ac.chk")
-        # path = os.path.join(self.config.experiment_dir, "modular_ac.chk")
-        # logging.info("loaded %s", path)
-        # self.saver.restore(self.session, path)
+        load_dir = os.path.join("experiments/%s" % self.config.model.load_source)
+        path = os.path.join(load_dir, "modular_ac.chk")
+        logging.info("loaded %s", path)
+        self.saver.restore(self.session, path)
 
     def experience(self, episode):
         running_reward = 0
