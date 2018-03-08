@@ -416,10 +416,12 @@ class CurriculumTrainer(object):
                         macro_acts = []
                         macro_advs = []
                         macro_tdlamrets = []
+                        trs = []
                         for t in transitions:
                             r = []
                             vpred = []
                             tr = sum(tt.r for tt in t)
+                            trs.append(tr)
                             for tt in t:
                                 r.append(tt.r)
                                 vpred.append(tt.vpred)
@@ -471,9 +473,12 @@ class CurriculumTrainer(object):
                 # logging.info("[rollout0] %s", [t.m1.action for t in transitions[0]])
                 # logging.info("[rollout1] %s", [t.m1.action for t in transitions[1]])
                 # logging.info("[rollout2] %s", [t.m1.action for t in transitions[2]])
-                logging.info("[rollout0] %s", [t.a for t in transitions[0]])
-                logging.info("[rollout1] %s", [t.a for t in transitions[1]])
-                logging.info("[rollout2] %s", [t.a for t in transitions[2]])
+                for i, transition in enumerate(transitions):
+                    logging.info("[rollout %s] %s, reward: %s", str(i), [t.a for t in transition], str(trs[i]))
+                    
+                # logging.info("[rollout0] %s", [t.a for t in transitions[0]])
+                # logging.info("[rollout1] %s", [t.a for t in transitions[1]])
+                # logging.info("[rollout2] %s", [t.a for t in transitions[2]])
                 logging.info("[reward] %s", total_reward / count)
                 logging.info("[error] %s", err / N_UPDATE)
                 logging.info("")
