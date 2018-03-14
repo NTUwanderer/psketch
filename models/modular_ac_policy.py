@@ -170,7 +170,7 @@ class ModularACPolicyModel(object):
         params = []
         for module in list(actors.values()) + list(critics.values()):
             params += module.params
-        self.saver = tf.train.Saver()
+        self.saver = None
 
         # self.session.run(tf.initialize_all_variables())
         self.session.run(tf.global_variables_initializer())
@@ -181,6 +181,10 @@ class ModularACPolicyModel(object):
         self.actor_trainers = actor_trainers
         self.critic_trainers = critic_trainers
         self.inputs = InputBundle(t_arg, t_step, t_feats, t_action_mask, t_reward)
+
+        self.variables = tf.trainable_variables()
+
+        self.step = 0
 
         # self.saver.restore(self.session, "experiments/craft_holdout/modular_ac.chk")
 
@@ -206,14 +210,24 @@ class ModularACPolicyModel(object):
             self.next_actor_seed += 1
 
     def save(self):
+        if self.saver == None:
+            self.saver = tf.train.Saver()
+
         self.saver.save(self.session, 
-                os.path.join(self.config.experiment_dir, "modular_ac.chk"))
+                os.path.join(self.config.experiment_dir, "modular_ac.chk"), global_step=self.step)
+
+        self.step += 1
 
     def load(self):
+        if self.config.model.load_from_holdout:
+            saver = tf.train.Saver(self.variables)
+        else:
+            saver = tf.train.Saver()
+
         load_dir = os.path.join("experiments/%s" % self.config.model.load_source)
         path = os.path.join(load_dir, "modular_ac.chk")
         logging.info("loaded %s", path)
-        self.saver.restore(self.session, path)
+        saver.restore(self.session, path)
 
     def experience(self, episode):
         running_reward = 0
