@@ -79,7 +79,7 @@ class CurriculumTrainer(object):
 
         # self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, ob_space.shape[0]])
         hid_size=32
-        num_hid_layers=2
+        num_hid_layers=3
         self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, model.n_features])
         self.policy = Policy(name="policy", ob=self.ob, ac_space=world.n_actions, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
         self.old_policy = Policy(name="old_policy", ob=self.ob, ac_space=world.n_actions, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))

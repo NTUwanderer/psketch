@@ -38,10 +38,10 @@ class Learner:
         self.assign_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
             for (oldv, newv) in zipsame(old_policy.get_variables(), policy.get_variables())])
 
-        self.assign_subs = []
-        self.change_subs = []
-        self.adams = []
-        self.losses = []
+        # self.assign_subs = []
+        # self.change_subs = []
+        # self.adams = []
+        # self.losses = []
         # self.sp_ac = sub_policies[0].pdtype.sample_placeholder([None])
         # for i in range(self.num_subpolicies):
         #     varlist = sub_policies[i].get_trainable_variables()
@@ -60,11 +60,11 @@ class Learner:
         # for i in range(self.num_subpolicies):
         #     self.adams[i].sync()
 
-    def nograd(self, var_list):
-        return tf.concat(axis=0, values=[
-            tf.reshape(tf.zeros_like(v), [U.numel(v)])
-            for v in var_list
-        ])
+    # def nograd(self, var_list):
+    #     return tf.concat(axis=0, values=[
+    #         tf.reshape(tf.zeros_like(v), [U.numel(v)])
+    #         for v in var_list
+    #     ])
 
 
     def policy_loss(self, pi, oldpi, ob, ac, atarg, ret, clip_param):
@@ -82,9 +82,9 @@ class Learner:
     def syncMasterPolicies(self):
         self.master_adam.sync()
 
-    def syncSubpolicies(self):
-        for i in range(self.num_subpolicies):
-            self.adams[i].sync()
+    # def syncSubpolicies(self):
+    #     for i in range(self.num_subpolicies):
+    #         self.adams[i].sync()
 
     def updateMasterPolicy(self, ep_lens, ep_rets, ob, ac, atarg, tdlamret):
         #ob, ac, atarg, tdlamret = seg["macro_ob"], seg["macro_ac"], seg["macro_adv"], seg["macro_tdlamret"]

@@ -17,8 +17,8 @@ trainer:
   improvement_threshold: 0.8
   hints: "resources/craft/hints.policy.yaml"
   max_timesteps: 100
-  max_policies: 4
-  random_prob: 0.3
+  max_policies: 5
+  random_prob: 0.2
 
 #name: craft_transfer
 #recipes: "resources/craft/recipes.yaml"
