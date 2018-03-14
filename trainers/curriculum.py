@@ -78,9 +78,11 @@ class CurriculumTrainer(object):
         model.prepare(world, self)
 
         # self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, ob_space.shape[0]])
+        hid_size=32
+        num_hid_layers=2
         self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, model.n_features])
-        self.policy = Policy(name="policy", ob=self.ob, ac_space=world.n_actions, hid_size=32, num_hid_layers=2, num_subpolicies=len(self.subtask_index))
-        self.old_policy = Policy(name="old_policy", ob=self.ob, ac_space=world.n_actions, hid_size=32, num_hid_layers=2, num_subpolicies=len(self.subtask_index))
+        self.policy = Policy(name="policy", ob=self.ob, ac_space=world.n_actions, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
+        self.old_policy = Policy(name="old_policy", ob=self.ob, ac_space=world.n_actions, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
         self.stochastic = True
 
         policy_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='policy')
@@ -189,7 +191,8 @@ class CurriculumTrainer(object):
             subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i])
             if np.random.uniform() < self.config.trainer.random_prob:
                 subPolicies[i] = np.random.randint(0, len(self.subtask_index))
-                # subPolicies[i] = targetSteps[policy_count[i]]
+            # if policy_count[i] < len(targetSteps):
+            #     subPolicies[i] = targetSteps[policy_count[i]]
 
         # initialize timer
         total_reward = 0.
@@ -244,7 +247,8 @@ class CurriculumTrainer(object):
                     subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i])
                     if np.random.uniform() < self.config.trainer.random_prob:
                         subPolicies[i] = np.random.randint(0, len(self.subtask_index))
-                        # subPolicies[i] = targetSteps[policy_count[i]]
+                    # if policy_count[i] < len(targetSteps):
+                    #     subPolicies[i] = targetSteps[policy_count[i]]
 
                 if shouldEnd and not done[i]:
                     transitions[i].append(MacroTransition(
@@ -379,7 +383,7 @@ class CurriculumTrainer(object):
     def transfer(self, model, world):
         # model.prepare(world, self)
         # model.load()
-        syncRound = 1
+        syncRound = 100
         i_iter = 0
 
         task_probs = []
