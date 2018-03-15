@@ -10,5 +10,7 @@ $ pip3 install -r requirements.txt
 $ python3 main.py
 ```
 
-Check logging in experiments/craft\_policy
+Check logging in experiments/craft\_policy <br/>
+
+Ref: [mlsh](https://github.com/openai/mlsh)
 
