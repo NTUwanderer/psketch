@@ -15,7 +15,7 @@ from .learner import Learner
 import logging
 
 N_ITERS = 3000000
-N_UPDATE = 100
+N_UPDATE = 1
 N_BATCH = 100
 N_TEST_BATCHES = 100
 IMPROVEMENT_THRESHOLD = 0.8
@@ -391,8 +391,6 @@ class CurriculumTrainer(object):
             min_reward = np.inf
 
             
-            if i_iter % syncRound == 0:
-                self.learner.syncMasterPolicies()
             # TODO refactor
             for _ in range(1):
                 possible_tasks = self.test_tasks
@@ -409,6 +407,9 @@ class CurriculumTrainer(object):
                 for j in range(N_UPDATE):
                     err = None
                     # get enough samples for one training step
+                    if i_iter != 0:
+                        self.learner.syncMasterPolicies()
+
                     while err is None:
                         i_iter += N_BATCH
                         transitions, reward = self.policy_do_rollout(model, world, 
