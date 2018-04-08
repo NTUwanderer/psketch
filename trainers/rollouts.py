@@ -106,7 +106,7 @@ def add_advantage_macro(rewards, macro_vpred, macrolen, gamma, lam):
     lastgaelam = 0
     for t in reversed(range(num_macro_acts)):
         # nonterminal = 1-new[t+1]
-        nonterminal = 1 if (t != num_macro_acts-2) else 0
+        nonterminal = 1 if (t != num_macro_acts-1) else 0
         delta = rew[t] + gamma * vpred[t+1] * nonterminal - vpred[t]
         macro_adv[t] = lastgaelam = delta + gamma * lam * nonterminal * lastgaelam
 
