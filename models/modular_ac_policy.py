@@ -221,11 +221,14 @@ class ModularACPolicyModel(object):
     def load(self):
         if self.config.model.load_from_holdout:
             saver = tf.train.Saver(self.variables)
+            load_dir = os.path.join("experiments/%s" % self.config.model.load_source)
+            path = os.path.join(load_dir, "modular_ac.chk")
         else:
             saver = tf.train.Saver()
+            load_dir = os.path.join("experiments/%s" % self.config.model.source)
+            ckpt = tf.train.get_checkpoint_state(load_dir)
+            path = ckpt.model_checkpoint_path
 
-        load_dir = os.path.join("experiments/%s" % self.config.model.load_source)
-        path = os.path.join(load_dir, "modular_ac.chk")
         logging.info("loaded %s", path)
         saver.restore(self.session, path)
 
