@@ -112,10 +112,12 @@ def add_advantage_macro(rewards, macro_vpred, macrolen, gamma, lam):
 
     macro_tdlamret = macro_adv + macro_vpred
 
-    # if sum(rewards) > 0:
-    #     print ('rewards: ', rewards)
-    #     print ('m_vpred: ', macro_vpred)
-    #     print ('m_adv  : ', macro_adv)
+    from random import random
+    if sum(rewards) > 0 or random() < 0.1:
+        print ('rewards: ', rewards)
+        print ('m_vpred: ', macro_vpred)
+        print ('m_adv  : ', macro_adv)
+        print ('m_tdl  : ', macro_tdlamret)
 
     return macro_adv, macro_tdlamret
 
