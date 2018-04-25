@@ -15,7 +15,7 @@ from .learner import Learner
 import logging
 
 N_ITERS = 3000000
-N_UPDATE = 1
+N_UPDATE = 100
 N_BATCH = 100
 N_TEST_BATCHES = 100
 IMPROVEMENT_THRESHOLD = 0.8
@@ -83,7 +83,7 @@ class CurriculumTrainer(object):
         self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, model.n_features])
         self.policy = Policy(name="policy", ob=self.ob, ac_space=world.n_actions, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
         self.old_policy = Policy(name="old_policy", ob=self.ob, ac_space=world.n_actions, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
-        self.stochastic = True
+        self.stochastic = False
 
         policy_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='policy')
         old_policy_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='old_policy')
@@ -285,14 +285,18 @@ class CurriculumTrainer(object):
                 task_counts[t[0].m1.task] += 1
 
         logging.info("[TEST]")
+        finalScores = []
         for i, task in enumerate(possible_tasks):
             i_task = self.task_index[task]
             score = 1. * task_rewards[i_task] / task_counts[i_task]
+            finalScores.append(score)
             logging.info("[task] %s[%s] %s %s", 
                     self.subtask_index.get(task.goal[0]),
                     self.cookbook.index.get(task.goal[1]),
                     task_probs[i],
                     score)
+
+        return finalScores
 
     def train(self, model, world):
         model.prepare(world, self)
