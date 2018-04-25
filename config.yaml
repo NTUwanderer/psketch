@@ -6,7 +6,7 @@ model:
   name: ModularACPolicyModel
   source: craft_policy
   load_source: craft_holdout
-  load_from_holdout: true
+  load_from_holdout: false
   use_args: false
   featurize_plan: false
   max_subtask_timesteps: 15
