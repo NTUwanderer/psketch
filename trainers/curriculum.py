@@ -9,6 +9,7 @@ import yaml
 import tensorflow as tf
 
 from .policy_network import Policy
+from .env_model import EnvModel
 from .rl_algs.common import tf_util as U
 from .rollouts import add_advantage_macro
 from .learner import Learner
@@ -93,11 +94,20 @@ class CurriculumTrainer(object):
         model.session.run(not_init_initializers)
 
         self.policy.reset(model.session)
+        self.old_policy.reset(model.session)
+
+        hid_size=1024
+        num_hid_layers=2
+        self.env_model = EnvModel(name="env_model", ob=self.ob, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
+        self.old_env_model = EnvModel(name="env_model", ob=self.ob, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
+        
         with model.session.as_default() as sess:
-            self.learner = Learner(self.policy, self.old_policy, len(self.subtask_index), None, clip_param=0.2, entcoeff=0, optim_epochs=10, optim_stepsize=3e-5, optim_batchsize=64)
+            self.learner = Learner(self.policy, self.old_policy, self.env_model, self.old_env_model, len(self.subtask_index), None, clip_param=0.2, entcoeff=0, optim_epochs=10, optim_stepsize=3e-5, optim_batchsize=64)
 
         model.load()
         # self.learner.syncMasterPolicies()
+        print ("policy variables: ", self.policy.get_variables())
+        print ("policy trainable variables: ", self.policy.get_trainable_variables())
         
     def do_rollout(self, model, world, possible_tasks, task_probs):
         states_before = []
