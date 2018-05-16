@@ -51,7 +51,7 @@ class CurriculumTrainer(object):
             test_hints = {}
         all_hints = dict(train_hints)
         all_hints.update(test_hints)
-        hint_keys = ['make[cloth]', 'make[bed]', 'make[stick]', 'make[bridge]', 'make[plank]', 'get[gold]', 'make[shears]', 'get[gem]', 'make[rope]']
+        hint_keys = ['make[cloth]', 'make[bed]', 'make[axe]', 'make[stick]', 'make[bridge]', 'make[plank]', 'get[gold]', 'make[shears]', 'get[gem]', 'make[rope]']
         # for hint_key, hint in all_hints.items():
         for hint_key in hint_keys:
             hint = all_hints[hint_key]
@@ -77,10 +77,12 @@ class CurriculumTrainer(object):
 
         model.prepare(world, self)
 
+        print ("tasks: ", self.test_tasks)
+
         # self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, ob_space.shape[0]])
         hid_size=32
         num_hid_layers=2
-        self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, model.n_features])
+        self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, model.n_features + len(self.test_tasks)])
         self.policy = Policy(name="policy", ob=self.ob, ac_space=world.n_actions, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
         self.old_policy = Policy(name="old_policy", ob=self.ob, ac_space=world.n_actions, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
         self.stochastic = True
@@ -157,6 +159,7 @@ class CurriculumTrainer(object):
         return transitions, total_reward / N_BATCH
 
     def policy_do_rollout(self, model, world, possible_tasks, task_probs):
+        taskIndices = []
         states_before = []
         states_before_master = []
         tasks = []
@@ -172,8 +175,9 @@ class CurriculumTrainer(object):
 
         # choose tasks and initialize model
         for _ in range(N_BATCH):
-            task = possible_tasks[self.random.choice(
-                len(possible_tasks), p=task_probs)]
+            taskIndex = self.random.choice(len(possible_tasks), p=task_probs)
+            task = possible_tasks[taskIndex]
+            taskIndices.append(taskIndex)
             goal, _ = task
             goal_name, goal_arg = goal
             scenario = world.sample_scenario_with_goal(goal_arg)
@@ -188,7 +192,7 @@ class CurriculumTrainer(object):
         mstates_before = model.get_state()
 
         for i in range(N_BATCH):
-            subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i])
+            subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i], taskIndices[i])
             if np.random.uniform() < self.config.trainer.random_prob:
                 subPolicies[i] = np.random.randint(0, len(self.subtask_index))
             # if policy_count[i] < len(targetSteps):
@@ -238,13 +242,13 @@ class CurriculumTrainer(object):
 
                 if shouldChange:
                     transitions[i].append(MacroTransition(
-                            states_before_master[i], mstates_before[i], subPolicies[i], 
+                            states_before_master[i], mstates_before[i], taskIndices[i], subPolicies[i], 
                             states_after[i], mstates_after[i], rewards[i], macro_vpreds[i]))
 
                     rewards[i] = 0
                     mstates_before[i] = mstates_after[i]
                     states_before_master[i] = states_after[i]
-                    subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i])
+                    subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i], taskIndices[i])
                     if np.random.uniform() < self.config.trainer.random_prob:
                         subPolicies[i] = np.random.randint(0, len(self.subtask_index))
                     # if policy_count[i] < len(targetSteps):
@@ -252,7 +256,7 @@ class CurriculumTrainer(object):
 
                 if shouldEnd and not done[i]:
                     transitions[i].append(MacroTransition(
-                            states_before_master[i], mstates_before[i], subPolicies[i], 
+                            states_before_master[i], mstates_before[i], taskIndices[i], subPolicies[i], 
                             states_after[i], mstates_after[i], rewards[i], macro_vpreds[i]))
                     # ???
                     # transitions[i].append(MacroTransition(
@@ -267,8 +271,17 @@ class CurriculumTrainer(object):
 
         return transitions, total_reward / N_BATCH
 
-    def chooseSubPolicy(self, model, state, mstate):
-        cur_subpolicy, macro_vpred = self.policy.act(self.stochastic, model.featurize(state, mstate))
+    def makeOb(self, model, state, mstate, taskIndex):
+        taskOneHot = np.zeros((len(self.test_tasks)))
+        taskOneHot[taskIndex] = 1
+        feature = model.featurize(state, mstate)
+        ob = np.concatenate((taskOneHot, feature))
+
+        return ob
+
+
+    def chooseSubPolicy(self, model, state, mstate, taskIndex):
+        cur_subpolicy, macro_vpred = self.policy.act(self.stochastic, self.makeOb(model, state, mstate, taskIndex))
         return cur_subpolicy, macro_vpred
 
     def test(self, model, world):
@@ -431,7 +444,7 @@ class CurriculumTrainer(object):
                                 r.append(tt.r)
                                 vpred.append(tt.vpred)
 
-                                macro_obs.append(model.featurize(tt.s1, tt.m1)) ## state, mstate
+                                macro_obs.append(self.makeOb(model, tt.s1, tt.m1, tt.i)) ## state, mstate
                                 macro_acts.append(tt.a)
 
                             macro_adv, macro_tdlamret = add_advantage_macro(r, vpred, self.config.model.max_subtask_timesteps, 0.99, 0.98)
