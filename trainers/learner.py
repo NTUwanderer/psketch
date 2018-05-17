@@ -40,10 +40,13 @@ class Learner:
         self.assign_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
             for (oldv, newv) in zipsame(old_policy.get_variables(), policy.get_variables())])
 
-        env_model_loss = self.env_model_loss(env_model, old_env_model, new_ob, ac, ret, clip_param)
+        env_total_loss = self.env_model_loss(env_model, old_env_model, new_ob, ac, ret, clip_param)
         self.env_model_var_list = env_model.get_trainable_variables()
-        self.env_model_loss = U.function([new_ob, ac, ret], U.flatgrad(env_model_loss, self.env_model_var_list))
+        self.env_model_loss = U.function([new_ob, ac, ret], U.flatgrad(env_total_loss, self.env_model_var_list))
         self.env_model_adam = MpiAdam(self.env_model_var_list, comm=comm)
+
+        self.assign_env_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
+            for (oldv, newv) in zipsame(old_env_model.get_variables(), env_model.get_variables())])
 
         U.initialize()
 
@@ -111,38 +114,18 @@ class Learner:
 
         return np.mean(rews), np.mean(ep_rets)
 
-    def updateEnvModel(self, ep_lens, ep_rets, ob, ac):
-#         #ob, ac, atarg, tdlamret = seg["macro_ob"], seg["macro_ac"], seg["macro_adv"], seg["macro_tdlamret"]
-#         # ob = np.ones_like(ob)
-#         mean = atarg.mean()
-#         std = atarg.std()
-#         meanlist = MPI.COMM_WORLD.allgather(mean)
-#         global_mean = np.mean(meanlist)
-# 
-#         real_var = std**2 + (mean - global_mean)**2
-#         variance_list = MPI.COMM_WORLD.allgather(real_var)
-#         global_std = np.sqrt(np.mean(variance_list))
-# 
-#         atarg = (atarg - global_mean) / max(global_std, 0.000001)
-# 
-#         d = Dataset(dict(ob=ob, ac=ac, atarg=atarg, vtarg=tdlamret), shuffle=True)
-#         optim_batchsize = min(self.optim_batchsize,ob.shape[0])
-# 
-#         self.policy.ob_rms.update(ob) # update running mean/std for policy
-# 
-#         self.assign_old_eq_new()
-#         for _ in range(self.optim_epochs):
-#             for batch in d.iterate_once(optim_batchsize):
-#                 g = self.master_loss(batch["ob"], batch["ac"], batch["atarg"], batch["vtarg"])
-#                 self.master_adam.update(g, 0.01, 1)
-# 
-#         # lrlocal = (seg["ep_lens"], seg["ep_rets"]) # local values
-#         lrlocal = (ep_lens, ep_rets)
-#         listoflrpairs = MPI.COMM_WORLD.allgather(lrlocal) # list of tuples
-#         lens, rews = map(flatten_lists, zip(*listoflrpairs))
-#         logger.record_tabular("EpRewMean", np.mean(rews))
-# 
-#         return np.mean(rews), np.mean(ep_rets)
+    def updateEnvModel(self, ep_rets, new_ob, ac):
+
+        d = Dataset(dict(new_ob=ob, ac=ac, ret=ep_rets), shuffle=True)
+        optim_batchsize = min(self.optim_batchsize,ob.shape[0])
+
+        self.env_model.ob_rms.update(ob) # update running mean/std for policy
+
+        self.assign_env_old_eq_new()
+        for _ in range(self.optim_epochs):
+            for batch in d.iterate_once(optim_batchsize):
+                g = self.env_model_loss(batch["new_ob"], batch["ac"], batch["ret"])
+                self.env_model_adam.update(g, 0.01, 1)
 
 def flatten_lists(listoflists):
     return [el for list_ in listoflists for el in list_]
