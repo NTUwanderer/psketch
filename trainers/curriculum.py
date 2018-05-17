@@ -448,6 +448,7 @@ class CurriculumTrainer(object):
                         ep_lens = []
                         ep_rets = []
                         macro_obs = []
+                        macro_new_obs = []
                         macro_acts = []
                         macro_advs = []
                         macro_tdlamrets = []
@@ -462,6 +463,7 @@ class CurriculumTrainer(object):
                                 vpred.append(tt.vpred)
 
                                 macro_obs.append(self.makeOb(model, tt.s1, tt.m1, tt.i)) ## state, mstate
+                                macro_new_obs.append(self.makeOb(model, tt.s2, tt.m2, tt.i)) ## state, mstate
                                 macro_acts.append(tt.a)
 
                             macro_adv, macro_tdlamret = add_advantage_macro(r, vpred, self.config.model.max_subtask_timesteps, 0.99, 0.98)
@@ -476,11 +478,13 @@ class CurriculumTrainer(object):
                             task_counts[t[0].m1.task] += 1
 
                         macro_obs = np.array(macro_obs)
+                        macro_new_obs = np.array(macro_new_obs)
                         macro_acts = np.array(macro_acts)
                         macro_advs = np.array(macro_advs)
                         macro_tdlamrets = np.array(macro_tdlamrets)
 
                         gmean, lmean = self.learner.updateMasterPolicy(ep_lens, ep_rets, macro_obs, macro_acts, macro_advs, macro_tdlamrets)
+                        self.learner.updateEnvModel(ep_rets, macro_new_obs, macro_acts)
 
                         total_reward += reward
                         count += 1
