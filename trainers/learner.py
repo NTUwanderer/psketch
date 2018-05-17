@@ -13,6 +13,7 @@ class Learner:
     # TODO
     def __init__(self, policy, old_policy, env_model, old_env_model, num_subpolicies, comm, clip_param=0.2, entcoeff=0, optim_epochs=10, optim_stepsize=3e-4, optim_batchsize=64):
         self.policy = policy
+        self.env_model = env_model
         self.clip_param = clip_param
         self.entcoeff = entcoeff
         self.optim_epochs = optim_epochs
@@ -32,7 +33,7 @@ class Learner:
         atarg = tf.placeholder(dtype=tf.float32, shape=[None]) # Target advantage function (if applicable)
         ret = tf.placeholder(dtype=tf.float32, shape=[None]) # Empirical return
 
-        total_loss = self.policy_loss(policy, old_policy, ob, ac, atarg, ret, clip_param)
+        total_loss = self.policy_loss(policy, old_policy, ac, atarg, ret, clip_param)
         self.master_policy_var_list = policy.get_trainable_variables()
         self.master_loss = U.function([ob, ac, atarg, ret], U.flatgrad(total_loss, self.master_policy_var_list))
         self.master_adam = MpiAdam(self.master_policy_var_list, comm=comm)
@@ -42,7 +43,7 @@ class Learner:
 
         env_total_loss = self.env_model_loss(env_model, old_env_model, new_ob, ac, ret, clip_param)
         self.env_model_var_list = env_model.get_trainable_variables()
-        self.env_model_loss = U.function([new_ob, ac, ret], U.flatgrad(env_total_loss, self.env_model_var_list))
+        self.env_loss = U.function([ob, new_ob, ac, ret], U.flatgrad(env_total_loss, self.env_model_var_list))
         self.env_model_adam = MpiAdam(self.env_model_var_list, comm=comm)
 
         self.assign_env_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
@@ -51,8 +52,9 @@ class Learner:
         U.initialize()
 
         self.syncMasterPolicies()
+        self.syncEnvModel()
 
-    def policy_loss(self, pi, oldpi, ob, ac, atarg, ret, clip_param):
+    def policy_loss(self, pi, oldpi, ac, atarg, ret, clip_param):
         ratio = tf.exp(pi.pd.logp(ac) - tf.clip_by_value(oldpi.pd.logp(ac), -20, 20)) # advantage * pnew / pold
         surr1 = ratio * atarg
         surr2 = U.clip(ratio, 1.0 - clip_param, 1.0 + clip_param) * atarg
@@ -72,8 +74,8 @@ class Learner:
 
         env_loss = tf.reduce_sum(tf.square(m.env_pred - new_ob))
 
-        env_model_loss = vf_loss + env_loss
-        return env_model_loss
+        total_loss = vf_loss + env_loss
+        return total_loss
 
     def syncMasterPolicies(self):
         self.master_adam.sync()
@@ -114,17 +116,17 @@ class Learner:
 
         return np.mean(rews), np.mean(ep_rets)
 
-    def updateEnvModel(self, ep_rets, new_ob, ac):
+    def updateEnvModel(self, ret, ob, new_ob, ac):
 
-        d = Dataset(dict(new_ob=ob, ac=ac, ret=ep_rets), shuffle=True)
-        optim_batchsize = min(self.optim_batchsize,ob.shape[0])
+        d = Dataset(dict(ob=ob, new_ob=new_ob, ac=ac, ret=ret), shuffle=True)
+        optim_batchsize = min(self.optim_batchsize,new_ob.shape[0])
 
         self.env_model.ob_rms.update(ob) # update running mean/std for policy
 
         self.assign_env_old_eq_new()
         for _ in range(self.optim_epochs):
             for batch in d.iterate_once(optim_batchsize):
-                g = self.env_model_loss(batch["new_ob"], batch["ac"], batch["ret"])
+                g = self.env_loss(batch["ob"], batch["new_ob"], batch["ac"], batch["ret"])
                 self.env_model_adam.update(g, 0.01, 1)
 
 def flatten_lists(listoflists):
