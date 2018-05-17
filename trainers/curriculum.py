@@ -84,6 +84,7 @@ class CurriculumTrainer(object):
         hid_size=32
         num_hid_layers=2
         self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, model.n_features + len(self.test_tasks)])
+        self.new_ob = U.get_placeholder(name="new_ob", dtype=tf.float32, shape=[None, model.n_features + len(self.test_tasks)])
         self.policy = Policy(name="policy", ob=self.ob, ac_space=world.n_actions, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
         self.old_policy = Policy(name="old_policy", ob=self.ob, ac_space=world.n_actions, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
         self.stochastic = True
@@ -99,7 +100,7 @@ class CurriculumTrainer(object):
         hid_size=1024
         num_hid_layers=2
         self.env_model = EnvModel(name="env_model", ob=self.ob, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
-        self.old_env_model = EnvModel(name="env_model", ob=self.ob, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
+        self.old_env_model = EnvModel(name="old_env_model", ob=self.ob, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
         
         with model.session.as_default() as sess:
             self.learner = Learner(self.policy, self.old_policy, self.env_model, self.old_env_model, len(self.subtask_index), None, clip_param=0.2, entcoeff=0, optim_epochs=10, optim_stepsize=3e-5, optim_batchsize=64)
@@ -228,7 +229,7 @@ class CurriculumTrainer(object):
                     continue
                 elif terminateOfCurrentSub[i]:
                     win = states_before[i].satisfies(goal_names[i], goal_args[i])
-                    mstates_after = model.get_state()
+                    # mstates_after = model.get_state() # ???
 
                     policy_count[i] += 1
 
@@ -267,7 +268,7 @@ class CurriculumTrainer(object):
                 if shouldEnd and not done[i]:
                     transitions[i].append(MacroTransition(
                             states_before_master[i], mstates_before[i], taskIndices[i], subPolicies[i], 
-                            states_after[i], mstates_after[i], rewards[i], macro_vpreds[i]))
+                            states_before[i], mstates_after[i], rewards[i], macro_vpreds[i])) # states_after -> states_before
                     # ???
                     # transitions[i].append(MacroTransition(
                     #         states_before[i], mstates_before[i], action[i], 
@@ -442,6 +443,7 @@ class CurriculumTrainer(object):
                         ep_rets = []
                         macro_obs = []
                         macro_new_obs = []
+                        macro_rets = []
                         macro_acts = []
                         macro_advs = []
                         macro_tdlamrets = []
@@ -458,6 +460,7 @@ class CurriculumTrainer(object):
                                 macro_obs.append(self.makeOb(model, tt.s1, tt.m1, tt.i)) ## state, mstate
                                 macro_new_obs.append(self.makeOb(model, tt.s2, tt.m2, tt.i)) ## state, mstate
                                 macro_acts.append(tt.a)
+                                macro_rets.append(tt.r)
 
                             macro_adv, macro_tdlamret = add_advantage_macro(r, vpred, self.config.model.max_subtask_timesteps, 0.99, 0.98)
 
@@ -472,12 +475,13 @@ class CurriculumTrainer(object):
 
                         macro_obs = np.array(macro_obs)
                         macro_new_obs = np.array(macro_new_obs)
+                        macro_rets = np.array(macro_rets)
                         macro_acts = np.array(macro_acts)
                         macro_advs = np.array(macro_advs)
                         macro_tdlamrets = np.array(macro_tdlamrets)
 
                         gmean, lmean = self.learner.updateMasterPolicy(ep_lens, ep_rets, macro_obs, macro_acts, macro_advs, macro_tdlamrets)
-                        self.learner.updateEnvModel(ep_rets, macro_new_obs, macro_acts)
+                        self.learner.updateEnvModel(macro_rets, macro_obs, macro_new_obs, macro_acts)
 
                         total_reward += reward
                         count += 1
