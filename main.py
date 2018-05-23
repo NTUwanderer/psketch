@@ -23,7 +23,9 @@ def main():
     model = models.load(config)
     trainer = trainers.load(config, world, model)
     #trainer.train(model, world)
-    trainer.test(model, world)
+    if (trainer.test(model, world) < 0.7):
+        return False
+
     with model.session.as_default():
         trainer.transfer(model, world)
 

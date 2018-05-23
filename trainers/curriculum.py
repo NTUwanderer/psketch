@@ -16,7 +16,7 @@ from .learner import Learner
 import logging
 
 N_ITERS = 3000000
-N_UPDATE = 1
+N_UPDATE = 100
 N_BATCH = 100
 N_TEST_BATCHES = 100
 IMPROVEMENT_THRESHOLD = 0.8
@@ -308,15 +308,19 @@ class CurriculumTrainer(object):
                 task_rewards[t[0].m1.task] += tr
                 task_counts[t[0].m1.task] += 1
 
+        finalScore = 0.0
         logging.info("[TEST]")
         for i, task in enumerate(possible_tasks):
             i_task = self.task_index[task]
             score = 1. * task_rewards[i_task] / task_counts[i_task]
+            finalScore += score / len(possible_tasks)
             logging.info("[task] %s[%s] %s %s", 
                     self.subtask_index.get(task.goal[0]),
                     self.cookbook.index.get(task.goal[1]),
                     task_probs[i],
                     score)
+
+        return finalScore
 
     def train(self, model, world):
         model.prepare(world, self)
