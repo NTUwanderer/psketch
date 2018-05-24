@@ -53,8 +53,8 @@ class CurriculumTrainer(object):
             test_hints = {}
         all_hints = dict(train_hints)
         all_hints.update(test_hints)
-        hint_keys = ['make[cloth]', 'make[bed]', 'make[axe]', 'make[stick]', 'make[bridge]', 'make[plank]', 'get[gold]', 'make[shears]', 'get[gem]', 'make[rope]']
-        # hint_keys = ['make[cloth]', 'make[bed]', 'make[stick]', 'make[bridge]', 'make[plank]', 'get[gold]', 'make[shears]', 'get[gem]', 'make[rope]']
+        # hint_keys = ['make[cloth]', 'make[bed]', 'make[axe]', 'make[stick]', 'make[bridge]', 'make[plank]', 'get[gold]', 'make[shears]', 'get[gem]', 'make[rope]']
+        hint_keys = ['make[cloth]', 'make[bed]', 'make[stick]', 'make[bridge]', 'make[plank]', 'get[gold]', 'make[shears]', 'get[gem]', 'make[rope]']
         # for hint_key, hint in all_hints.items():
         for hint_key in hint_keys:
             hint = all_hints[hint_key]
