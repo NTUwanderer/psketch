@@ -34,6 +34,9 @@ class Policy(object):
             self.pdtype = pdtype = CategoricalPdType(num_subpolicies)
             self.pd = pdtype.pdfromflat(self.selector)
 
+        # all probs
+        self._acts = U.function([ob], [self.selector, self.vpred])
+
         # sample actions
         stochastic = tf.placeholder(dtype=tf.bool, shape=())
         ac = U.switch(stochastic, self.pd.sample(), self.pd.mode())
@@ -46,6 +49,9 @@ class Policy(object):
     def act(self, stochastic, ob):
         ac1, vpred1 =  self._act(stochastic, ob[None])
         return ac1[0], vpred1[0]
+    def getActs(self, obs):
+        acts, vpreds = self._acts(obs)
+        return acts, vpreds
     def get_variables(self):
         return tf.get_collection(tf.GraphKeys.VARIABLES, self.scope)
     def get_trainable_variables(self):

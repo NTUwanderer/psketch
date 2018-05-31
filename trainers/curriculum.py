@@ -10,6 +10,7 @@ import tensorflow as tf
 
 from .policy_network import Policy
 from .env_model import EnvModel
+from .path import Path
 from .rl_algs.common import tf_util as U
 from .rollouts import add_advantage_macro
 from .learner import Learner
@@ -53,6 +54,7 @@ class CurriculumTrainer(object):
         all_hints = dict(train_hints)
         all_hints.update(test_hints)
         hint_keys = ['make[cloth]', 'make[bed]', 'make[axe]', 'make[stick]', 'make[bridge]', 'make[plank]', 'get[gold]', 'make[shears]', 'get[gem]', 'make[rope]']
+        # hint_keys = ['make[cloth]', 'make[bed]', 'make[stick]', 'make[bridge]', 'make[plank]', 'get[gold]', 'make[shears]', 'get[gem]', 'make[rope]']
         # for hint_key, hint in all_hints.items():
         for hint_key in hint_keys:
             hint = all_hints[hint_key]
@@ -85,6 +87,8 @@ class CurriculumTrainer(object):
         num_hid_layers=2
         self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, model.n_features + len(self.test_tasks)])
         self.new_ob = U.get_placeholder(name="new_ob", dtype=tf.float32, shape=[None, model.n_features + len(self.test_tasks)])
+        self.acts = U.get_placeholder(name="acts", dtype=tf.int32, shape=(None, ))
+
         self.policy = Policy(name="policy", ob=self.ob, ac_space=world.n_actions, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
         self.old_policy = Policy(name="old_policy", ob=self.ob, ac_space=world.n_actions, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
         self.stochastic = True
@@ -99,8 +103,8 @@ class CurriculumTrainer(object):
 
         hid_size=1024
         num_hid_layers=2
-        self.env_model = EnvModel(name="env_model", ob=self.ob, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
-        self.old_env_model = EnvModel(name="old_env_model", ob=self.ob, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
+        self.env_model = EnvModel(name="env_model", ob=self.ob, acts=self.acts, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
+        self.old_env_model = EnvModel(name="old_env_model", ob=self.ob, acts=self.acts, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
         
         with model.session.as_default() as sess:
             self.learner = Learner(self.policy, self.old_policy, self.env_model, self.old_env_model, len(self.subtask_index), None, clip_param=0.2, entcoeff=0, optim_epochs=10, optim_stepsize=3e-5, optim_batchsize=64)
@@ -203,7 +207,12 @@ class CurriculumTrainer(object):
         mstates_before = model.get_state()
 
         for i in range(N_BATCH):
-            subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i], taskIndices[i])
+            if np.random.uniform() < self.config.trainer.trace_prob:
+                subPolicies[i], macro_vpreds[i] = self.traceBestSubPolicy(model, states_before[i], mstates_before[i], taskIndices[i],
+                                                                self.config.trainer.max_policies, self.getGoalIndex(world, goal_args[i]))
+            else:
+                subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i], taskIndices[i])
+
             if np.random.uniform() < self.config.trainer.random_prob:
                 subPolicies[i] = np.random.randint(0, len(self.subtask_index))
             # if policy_count[i] < len(targetSteps):
@@ -229,6 +238,7 @@ class CurriculumTrainer(object):
                     continue
                 elif terminateOfCurrentSub[i]:
                     win = states_before[i].satisfies(goal_names[i], goal_args[i])
+
                     # mstates_after = model.get_state() # ???
 
                     policy_count[i] += 1
@@ -259,7 +269,12 @@ class CurriculumTrainer(object):
                     rewards[i] = 0
                     mstates_before[i] = mstates_after[i]
                     states_before_master[i] = states_after[i]
-                    subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i], taskIndices[i])
+                    if np.random.uniform() < self.config.trainer.trace_prob:
+                        subPolicies[i], macro_vpreds[i] = self.traceBestSubPolicy(model, states_before[i], mstates_before[i], taskIndices[i],
+                                                self.config.trainer.max_policies - policy_count[i], self.getGoalIndex(world, goal_args[i]))
+                    else:
+                        subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i], taskIndices[i])
+
                     if np.random.uniform() < self.config.trainer.random_prob:
                         subPolicies[i] = np.random.randint(0, len(self.subtask_index))
                     # if policy_count[i] < len(targetSteps):
@@ -282,6 +297,12 @@ class CurriculumTrainer(object):
 
         return transitions, total_reward / N_BATCH
 
+    def retrieveGoalNum(self, ob, goal_arg, world):
+        return ob[-5 - world.cookbook.n_kinds + goal_arg]
+
+    def getGoalIndex(self, world, goal_arg):
+        return -5 - world.cookbook.n_kinds + goal_arg
+
     def makeOb(self, model, state, mstate, taskIndex):
         taskOneHot = np.zeros((len(self.test_tasks)))
         taskOneHot[taskIndex] = 1
@@ -294,6 +315,55 @@ class CurriculumTrainer(object):
     def chooseSubPolicy(self, model, state, mstate, taskIndex):
         cur_subpolicy, macro_vpred = self.policy.act(self.stochastic, self.makeOb(model, state, mstate, taskIndex))
         return cur_subpolicy, macro_vpred
+
+    def traceBestSubPolicy(self, model, state, mstate, taskIndex, depth, goalIndex):
+        branches = 2
+
+        initOb = self.makeOb(model, state, mstate, taskIndex)
+        initP = Path(initOb)
+        allPaths = [initP]
+
+        for d in range(depth):
+            origSize = len(allPaths)
+
+            obs = np.array([ path.obs[-1]  for path in allPaths ])
+            acts, vpreds = self.policy.getActs(obs)
+            # print ("obs: ", obs)
+            # print ("acts: ", acts)
+
+            newActs = np.zeros((branches * origSize), dtype=np.int8)
+            newObs  = np.concatenate((obs, obs))
+            for i in range(origSize):
+                for j in range(branches):
+                    maxI = np.argmax(acts[i])
+                    minI = np.argmin(acts[i])
+                    newActs[i + j * origSize] = maxI
+                    # print ("indices: ", i, maxI, minI)
+                    # print ("shape: ", len(acts), len(acts[i]))
+                    acts[i][maxI] = acts[i][minI] - 1
+
+            env_preds, _ = self.env_model.getObs(newActs, newObs)
+
+            temp = []
+            for i in range(branches):
+                temp += allPaths
+
+            allPaths = temp
+
+            for i in range(len(allPaths)):
+                allPaths[i].add(newActs[i], vpreds[i % origSize], env_preds[i])
+
+        bestAction = -1
+        bestVpred = -1
+        bestResult = -1
+        for path in allPaths:
+            r = path.maxReward(goalIndex)
+            if bestAction == -1 or bestResult < r:
+                bestAction = path.acts[0]
+                bestVpred = path.vpreds[0]
+                bestResult = r
+
+        return bestAction, bestVpred
 
     def test(self, model, world):
         possible_tasks = self.test_tasks
@@ -429,6 +499,8 @@ class CurriculumTrainer(object):
 
                 total_reward = 0.
                 total_err = 0.
+                total_env_loss = 0.
+                env_loss_count = 0
                 count = 0.
                 task_rewards = defaultdict(lambda: 0)
                 task_counts = defaultdict(lambda: 0)
@@ -461,8 +533,13 @@ class CurriculumTrainer(object):
                                 r.append(tt.r)
                                 vpred.append(tt.vpred)
 
-                                macro_obs.append(self.makeOb(model, tt.s1, tt.m1, tt.i)) ## state, mstate
-                                macro_new_obs.append(self.makeOb(model, tt.s2, tt.m2, tt.i)) ## state, mstate
+                                ob = self.makeOb(model, tt.s1, tt.m1, tt.i)
+                                newOb = self.makeOb(model, tt.s2, tt.m2, tt.i)
+                                total_env_loss += self.env_model.getEnvLoss(ob, newOb)
+                                env_loss_count += 1
+
+                                macro_obs.append(ob) ## state, mstate
+                                macro_new_obs.append(newOb) ## state, mstate
                                 macro_acts.append(tt.a)
                                 macro_rets.append(tt.r)
 
@@ -521,6 +598,7 @@ class CurriculumTrainer(object):
                 # logging.info("[rollout2] %s", [t.a for t in transitions[2]])
                 logging.info("[reward] %s", total_reward / count)
                 logging.info("[error] %s", err / N_UPDATE)
+                logging.info("[env_loss] %s", total_env_loss / env_loss_count)
                 logging.info("")
                 min_reward = min(min_reward, min(scores))
 

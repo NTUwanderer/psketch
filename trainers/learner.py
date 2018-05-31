@@ -29,7 +29,8 @@ class Learner:
         # inputs for training theta
         ob = U.get_placeholder_cached(name="ob")
         new_ob = U.get_placeholder_cached(name="new_ob")
-        ac = policy.pdtype.sample_placeholder([None])
+        ac = policy.pdtype.sample_placeholder([None, ])
+        acts = U.get_placeholder_cached(name="acts")
         atarg = tf.placeholder(dtype=tf.float32, shape=[None]) # Target advantage function (if applicable)
         ret = tf.placeholder(dtype=tf.float32, shape=[None]) # Empirical return
 
@@ -41,9 +42,9 @@ class Learner:
         self.assign_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
             for (oldv, newv) in zipsame(old_policy.get_variables(), policy.get_variables())])
 
-        env_total_loss = self.env_model_loss(env_model, old_env_model, new_ob, ac, ret, clip_param)
+        env_total_loss = self.env_model_loss(env_model, old_env_model, new_ob, acts, ret, clip_param)
         self.env_model_var_list = env_model.get_trainable_variables()
-        self.env_loss = U.function([ob, new_ob, ac, ret], U.flatgrad(env_total_loss, self.env_model_var_list))
+        self.env_loss = U.function([ob, new_ob, acts, ret], U.flatgrad(env_total_loss, self.env_model_var_list))
         self.env_model_adam = MpiAdam(self.env_model_var_list, comm=comm)
 
         self.assign_env_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
@@ -118,7 +119,7 @@ class Learner:
 
     def updateEnvModel(self, ret, ob, new_ob, ac):
 
-        d = Dataset(dict(ob=ob, new_ob=new_ob, ac=ac, ret=ret), shuffle=True)
+        d = Dataset(dict(ob=ob, new_ob=new_ob, acts=ac, ret=ret), shuffle=True)
         optim_batchsize = min(self.optim_batchsize,new_ob.shape[0])
 
         self.env_model.ob_rms.update(ob) # update running mean/std for policy
@@ -126,7 +127,7 @@ class Learner:
         self.assign_env_old_eq_new()
         for _ in range(self.optim_epochs):
             for batch in d.iterate_once(optim_batchsize):
-                g = self.env_loss(batch["ob"], batch["new_ob"], batch["ac"], batch["ret"])
+                g = self.env_loss(batch["ob"], batch["new_ob"], batch["acts"], batch["ret"])
                 self.env_model_adam.update(g, 0.01, 1)
 
 def flatten_lists(listoflists):

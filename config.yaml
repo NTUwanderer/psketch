@@ -18,6 +18,7 @@ trainer:
   hints: "resources/craft/hints.policy.yaml"
   max_timesteps: 100
   max_policies: 5
+  trace_prob: 1.0
   random_prob: 0.2
 
 #name: craft_transfer
