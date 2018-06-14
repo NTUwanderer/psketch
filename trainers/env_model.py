@@ -33,7 +33,7 @@ class EnvModel(object):
             self.vpred = U.dense(last_out, 1, "vffinal", weight_init=U.normc_initializer(1.0))[:,0]
 
             # master policy
-            last_out = obz
+            last_out = tf.concat([obz, tf.cast(onehot, dtype=tf.float32)], axis=1)
             for i in range(num_hid_layers):
                 last_out = tf.nn.tanh(U.dense(last_out, hid_size, "envmodel%i"%(i+1), weight_init=U.normc_initializer(1.0)))
             self.env_pred = U.dense(last_out, ob.get_shape()[1], "envmodel_final", U.normc_initializer(1.0))
