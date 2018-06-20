@@ -22,15 +22,7 @@ class EnvModel(object):
             obz = tf.clip_by_value((ob - self.ob_rms.mean) / self.ob_rms.std, -5.0, 5.0)
             # obz = ob
 
-            print ("obz: ", obz)
             onehot = tf.one_hot(acts, num_subpolicies)
-            print ("onehot: ", onehot)
-
-            last_out = tf.concat([obz, tf.cast(onehot, dtype=tf.float32)], axis=1)
-            print ("last_out: ", last_out)
-            for i in range(num_hid_layers):
-                last_out = tf.nn.tanh(U.dense(last_out, hid_size, "vffc%i"%(i+1), weight_init=U.normc_initializer(1.0)))
-            self.vpred = U.dense(last_out, 1, "vffinal", weight_init=U.normc_initializer(1.0))[:,0]
 
             # master policy
             last_out = tf.concat([obz, tf.cast(onehot, dtype=tf.float32)], axis=1)
@@ -38,14 +30,14 @@ class EnvModel(object):
                 last_out = tf.nn.tanh(U.dense(last_out, hid_size, "envmodel%i"%(i+1), weight_init=U.normc_initializer(1.0)))
             self.env_pred = U.dense(last_out, ob.get_shape()[1], "envmodel_final", U.normc_initializer(1.0))
 
-        self._act = U.function([acts, ob], [self.env_pred, self.vpred])
+        self._act = U.function([acts, ob], [self.env_pred])
 
     def act(self, action, ob):
-        env_pred1, vpred1 =  self._act(action[None], ob[None])
-        return env_pred1[0], vpred1[0]
+        env_pred1 = self._act(action[None], ob[None])
+        return env_pred1[0]
     def getObs(self, actions, obs):
-        env_preds, vpreds =  self._act(actions, obs)
-        return env_preds, vpreds
+        env_preds = self._act(actions, obs)[0]
+        return env_preds
     def get_variables(self):
         return tf.get_collection(tf.GraphKeys.VARIABLES, self.scope)
     def get_trainable_variables(self):

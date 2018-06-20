@@ -342,7 +342,7 @@ class CurriculumTrainer(object):
                     # print ("shape: ", len(acts), len(acts[i]))
                     acts[i][maxI] = acts[i][minI] - 1
 
-            env_preds, _ = self.env_model.getObs(newActs, newObs)
+            env_preds = self.env_model.getObs(newActs, newObs)
 
             temp = []
             for i in range(branches):
@@ -509,6 +509,7 @@ class CurriculumTrainer(object):
                     # get enough samples for one training step
                     if i_iter != 0:
                         self.learner.syncMasterPolicies()
+                        self.learner.syncEnvModel()
 
                     while err is None:
                         i_iter += N_BATCH
@@ -519,7 +520,7 @@ class CurriculumTrainer(object):
                         ep_rets = []
                         macro_obs = []
                         macro_new_obs = []
-                        macro_rets = []
+                        # macro_rets = []
                         macro_acts = []
                         macro_advs = []
                         macro_tdlamrets = []
@@ -541,7 +542,7 @@ class CurriculumTrainer(object):
                                 macro_obs.append(ob) ## state, mstate
                                 macro_new_obs.append(newOb) ## state, mstate
                                 macro_acts.append(tt.a)
-                                macro_rets.append(tt.r)
+                                # macro_rets.append(tt.r)
 
                             macro_adv, macro_tdlamret = add_advantage_macro(r, vpred, self.config.model.max_subtask_timesteps, 0.99, 0.98)
 
@@ -556,13 +557,13 @@ class CurriculumTrainer(object):
 
                         macro_obs = np.array(macro_obs)
                         macro_new_obs = np.array(macro_new_obs)
-                        macro_rets = np.array(macro_rets)
+                        # macro_rets = np.array(macro_rets)
                         macro_acts = np.array(macro_acts)
                         macro_advs = np.array(macro_advs)
                         macro_tdlamrets = np.array(macro_tdlamrets)
 
                         gmean, lmean = self.learner.updateMasterPolicy(ep_lens, ep_rets, macro_obs, macro_acts, macro_advs, macro_tdlamrets)
-                        self.learner.updateEnvModel(macro_rets, macro_obs, macro_new_obs, macro_acts)
+                        self.learner.updateEnvModel(macro_obs, macro_new_obs, macro_acts)
 
                         total_reward += reward
                         count += 1

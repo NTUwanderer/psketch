@@ -42,9 +42,9 @@ class Learner:
         self.assign_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
             for (oldv, newv) in zipsame(old_policy.get_variables(), policy.get_variables())])
 
-        env_total_loss = self.env_model_loss(env_model, old_env_model, new_ob, acts, ret, clip_param)
+        env_total_loss = self.env_model_loss(env_model, old_env_model, new_ob, acts, clip_param)
         self.env_model_var_list = env_model.get_trainable_variables()
-        self.env_loss = U.function([ob, new_ob, acts, ret], U.flatgrad(env_total_loss, self.env_model_var_list))
+        self.env_loss = U.function([ob, new_ob, acts], U.flatgrad(env_total_loss, self.env_model_var_list))
         self.env_model_adam = MpiAdam(self.env_model_var_list, comm=comm)
 
         self.assign_env_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
@@ -67,15 +67,18 @@ class Learner:
         total_loss = pol_surr + vf_loss
         return total_loss
 
-    def env_model_loss(self, m, old_m, new_ob, ac, ret, clip_param):
-        vfloss1 = tf.square(m.vpred - ret)
-        vpredclipped = m.vpred + tf.clip_by_value(m.vpred - old_m.vpred, -clip_param, clip_param)
-        vfloss2 = tf.square(vpredclipped - ret)
-        vf_loss = .5 * U.mean(tf.maximum(vfloss1, vfloss2))
+    def env_model_loss(self, m, old_m, new_ob, ac, clip_param):
+        # vfloss1 = tf.square(m.vpred - ret)
+        # vpredclipped = m.vpred + tf.clip_by_value(m.vpred - old_m.vpred, -clip_param, clip_param)
+        # vfloss2 = tf.square(vpredclipped - ret)
+        # vf_loss = .5 * U.mean(tf.maximum(vfloss1, vfloss2))
 
-        env_loss = tf.reduce_sum(tf.square(m.env_pred - new_ob))
+        env_loss1 = tf.reduce_sum(tf.square(m.env_pred - new_ob))
+        env_pred_clipped = m.env_pred + tf.clip_by_value(m.env_pred - old_m.env_pred, -clip_param, clip_param)
+        env_loss2 = tf.reduce_sum(tf.square(env_pred_clipped - new_ob))
+        env_loss = 0.5 * U.mean(tf.maximum(env_loss1, env_loss2))
 
-        total_loss = vf_loss + env_loss
+        total_loss = env_loss
         return total_loss
 
     def syncMasterPolicies(self):
@@ -117,9 +120,9 @@ class Learner:
 
         return np.mean(rews), np.mean(ep_rets)
 
-    def updateEnvModel(self, ret, ob, new_ob, ac):
+    def updateEnvModel(self, ob, new_ob, ac):
 
-        d = Dataset(dict(ob=ob, new_ob=new_ob, acts=ac, ret=ret), shuffle=True)
+        d = Dataset(dict(ob=ob, new_ob=new_ob, acts=ac), shuffle=True)
         optim_batchsize = min(self.optim_batchsize,new_ob.shape[0])
 
         self.env_model.ob_rms.update(ob) # update running mean/std for policy
@@ -127,7 +130,7 @@ class Learner:
         self.assign_env_old_eq_new()
         for _ in range(self.optim_epochs):
             for batch in d.iterate_once(optim_batchsize):
-                g = self.env_loss(batch["ob"], batch["new_ob"], batch["acts"], batch["ret"])
+                g = self.env_loss(batch["ob"], batch["new_ob"], batch["acts"])
                 self.env_model_adam.update(g, 0.01, 1)
 
 def flatten_lists(listoflists):
