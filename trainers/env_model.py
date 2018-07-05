@@ -17,15 +17,11 @@ class EnvModel(object):
 
         with tf.variable_scope(name):
             self.scope = tf.get_variable_scope().name
-            with tf.variable_scope("obfilter"):
-                self.ob_rms = RunningMeanStd(shape=(ob.get_shape()[1],))
-            obz = tf.clip_by_value((ob - self.ob_rms.mean) / self.ob_rms.std, -5.0, 5.0)
-            # obz = ob
 
             onehot = tf.one_hot(acts, num_subpolicies)
 
             # master policy
-            last_out = tf.concat([obz, tf.cast(onehot, dtype=tf.float32)], axis=1)
+            last_out = tf.concat([ob, tf.cast(onehot, dtype=tf.float32)], axis=1)
             for i in range(num_hid_layers):
                 last_out = tf.nn.tanh(U.dense(last_out, hid_size, "envmodel%i"%(i+1), weight_init=U.normc_initializer(1.0)))
             self.env_pred = U.dense(last_out, ob.get_shape()[1], "envmodel_final", U.normc_initializer(1.0))

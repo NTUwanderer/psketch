@@ -74,7 +74,7 @@ class Learner:
         # vf_loss = .5 * U.mean(tf.maximum(vfloss1, vfloss2))
 
         env_loss1 = tf.reduce_sum(tf.square(m.env_pred - new_ob))
-        env_pred_clipped = m.env_pred + tf.clip_by_value(m.env_pred - old_m.env_pred, -clip_param, clip_param)
+        env_pred_clipped = m.env_pred + (m.env_pred - old_m.env_pred)
         env_loss2 = tf.reduce_sum(tf.square(env_pred_clipped - new_ob))
         env_loss = 0.5 * U.mean(tf.maximum(env_loss1, env_loss2))
 
@@ -124,8 +124,6 @@ class Learner:
 
         d = Dataset(dict(ob=ob, new_ob=new_ob, acts=ac), shuffle=True)
         optim_batchsize = min(self.optim_batchsize,new_ob.shape[0])
-
-        self.env_model.ob_rms.update(ob) # update running mean/std for policy
 
         self.assign_env_old_eq_new()
         for _ in range(self.optim_epochs):
