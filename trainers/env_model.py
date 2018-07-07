@@ -44,7 +44,7 @@ class EnvModel(object):
             initializer = tf.variables_initializer(varlist)
             # U.get_session().run(initializer)
             sess.run(initializer)
-    def getEnvLoss(self, ob, newOb):
-        return np.sum(np.square(ob - newOb))
+    def getEnvLoss(self, action, ob, newOb):
+        return np.sum(np.square(self.act(np.array(action), np.array(ob)) - newOb))
 
 

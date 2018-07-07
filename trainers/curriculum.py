@@ -536,7 +536,7 @@ class CurriculumTrainer(object):
 
                                 ob = self.makeOb(model, tt.s1, tt.m1, tt.i)
                                 newOb = self.makeOb(model, tt.s2, tt.m2, tt.i)
-                                total_env_loss += self.env_model.getEnvLoss(ob, newOb)
+                                total_env_loss += self.env_model.getEnvLoss(tt.a, ob, newOb)
                                 env_loss_count += 1
 
                                 macro_obs.append(ob) ## state, mstate
