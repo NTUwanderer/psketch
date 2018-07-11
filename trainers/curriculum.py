@@ -60,7 +60,7 @@ class CurriculumTrainer(object):
             hint = all_hints[hint_key]
             goal = util.parse_fexp(hint_key)
             goal = (self.subtask_index.index(goal[0]), self.cookbook.index[goal[1]])
-            if config.model.use_args:
+            if config.model.use_args: # false
                 steps = [util.parse_fexp(s) for s in hint]
                 steps = [(self.subtask_index.index(a), self.cookbook.index[b])
                         for a, b in steps]
@@ -78,9 +78,15 @@ class CurriculumTrainer(object):
 
             print (hint_key, hint, task)
 
-        model.prepare(world, self)
+        self.start_counts = np.zeros((len(self.subtask_index)), dtype=np.float32)
+        self.next_counts = np.zeros((len(self.subtask_index), len(self.subtask_index)), dtype=np.float32)
+        for train_task in self.train_tasks:
+            steps = train_task.steps
+            self.start_counts[steps[0]] += 1
+            for i in range(len(steps)-1):
+                self.next_counts[steps[i]][steps[i+1]] += 1
 
-        print ("tasks: ", self.test_tasks)
+        model.prepare(world, self)
 
         # self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, ob_space.shape[0]])
         hid_size=32
@@ -88,9 +94,11 @@ class CurriculumTrainer(object):
         self.ob = U.get_placeholder(name="ob", dtype=tf.float32, shape=[None, model.n_features + len(self.test_tasks)])
         self.new_ob = U.get_placeholder(name="new_ob", dtype=tf.float32, shape=[None, model.n_features + len(self.test_tasks)])
         self.acts = U.get_placeholder(name="acts", dtype=tf.int32, shape=(None, ))
+        self.prev_act = U.get_placeholder(name="prev_act", dtype=tf.int32, shape=(None, ))
+        self.prev_weight = U.get_placeholder(name="prev_weight", dtype=tf.float32, shape=(None, ))
 
-        self.policy = Policy(name="policy", ob=self.ob, ac_space=world.n_actions, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
-        self.old_policy = Policy(name="old_policy", ob=self.ob, ac_space=world.n_actions, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index))
+        self.policy = Policy(name="policy", ob=self.ob, ac_space=world.n_actions, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index), prev_act=self.prev_act, prev_weight=self.prev_weight, start_counts=self.start_counts, next_counts=self.next_counts)
+        self.old_policy = Policy(name="old_policy", ob=self.ob, ac_space=world.n_actions, hid_size=hid_size, num_hid_layers=num_hid_layers, num_subpolicies=len(self.subtask_index), prev_act=self.prev_act, prev_weight=self.prev_weight, start_counts=self.start_counts, next_counts=self.next_counts)
         self.stochastic = True
 
         policy_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='policy')
@@ -180,6 +188,8 @@ class CurriculumTrainer(object):
         tasks = []
         goal_names = []
         goal_args = []
+        prevActs = [-1] * N_BATCH
+        prevWeights = [0.5] * N_BATCH
         subPolicies = [-1] * N_BATCH
         macro_vpreds = [-1] * N_BATCH
         rewards = [0] * N_BATCH
@@ -207,11 +217,14 @@ class CurriculumTrainer(object):
         mstates_before = model.get_state()
 
         for i in range(N_BATCH):
-            if np.random.uniform() < self.config.trainer.trace_prob:
+            prevActs[i] = subPolicies[i]
+            prevWeights[i] = 0.5
+            if self.config.trainer.use_env_model and np.random.uniform() < self.config.trainer.trace_prob:
                 subPolicies[i], macro_vpreds[i] = self.traceBestSubPolicy(model, states_before[i], mstates_before[i], taskIndices[i],
-                                                                self.config.trainer.max_policies, self.getGoalIndex(world, goal_args[i]))
+                                                                self.config.trainer.max_policies, self.getGoalIndex(world, goal_args[i]),
+                                                                subPolicies[i], prevWeights[i])
             else:
-                subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i], taskIndices[i])
+                subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i], taskIndices[i], subPolicies[i], prevWeights[i])
 
             if np.random.uniform() < self.config.trainer.random_prob:
                 subPolicies[i] = np.random.randint(0, len(self.subtask_index))
@@ -264,31 +277,31 @@ class CurriculumTrainer(object):
                 if shouldChange:
                     transitions[i].append(MacroTransition(
                             states_before_master[i], mstates_before[i], taskIndices[i], subPolicies[i], 
-                            states_after[i], mstates_after[i], rewards[i], macro_vpreds[i]))
+                            states_after[i], mstates_after[i], rewards[i], macro_vpreds[i], prevActs[i], prevWeights[i]))
 
                     rewards[i] = 0
                     mstates_before[i] = mstates_after[i]
                     states_before_master[i] = states_after[i]
-                    if np.random.uniform() < self.config.trainer.trace_prob:
+
+                    prevActs[i] = subPolicies[i]
+                    prevWeights[i] = 0.5
+                    if self.config.trainer.use_env_model and np.random.uniform() < self.config.trainer.trace_prob:
                         subPolicies[i], macro_vpreds[i] = self.traceBestSubPolicy(model, states_before[i], mstates_before[i], taskIndices[i],
-                                                self.config.trainer.max_policies - policy_count[i], self.getGoalIndex(world, goal_args[i]))
+                                                self.config.trainer.max_policies - policy_count[i], self.getGoalIndex(world, goal_args[i]),
+                                                subPolicies[i], prevWeights[i])
                     else:
-                        subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i], taskIndices[i])
+                        subPolicies[i], macro_vpreds[i] = self.chooseSubPolicy(model, states_before[i], mstates_before[i], taskIndices[i], subPolicies[i], prevWeights[i])
 
                     if np.random.uniform() < self.config.trainer.random_prob:
                         subPolicies[i] = np.random.randint(0, len(self.subtask_index))
-                    # if policy_count[i] < len(targetSteps):
-                    #     subPolicies[i] = targetSteps[policy_count[i]]
 
                 if shouldEnd and not done[i]:
                     transitions[i].append(MacroTransition(
                             states_before_master[i], mstates_before[i], taskIndices[i], subPolicies[i], 
-                            states_before[i], mstates_after[i], rewards[i], macro_vpreds[i])) # states_after -> states_before
-                    # ???
-                    # transitions[i].append(MacroTransition(
-                    #         states_before[i], mstates_before[i], action[i], 
-                    #         states_after[i], mstates_after[i], rewards[i]))
+                            states_before[i], mstates_after[i], rewards[i], macro_vpreds[i], prevActs[i], prevWeights[i])) # states_after -> states_before
 
+                    prevActs[i] = subPolicies[i]
+                    prevWeights[i] = 0.5
                     subPolicies[i] = -1
                     done[i] = True
 
@@ -312,11 +325,11 @@ class CurriculumTrainer(object):
         return ob
 
 
-    def chooseSubPolicy(self, model, state, mstate, taskIndex):
-        cur_subpolicy, macro_vpred = self.policy.act(self.stochastic, self.makeOb(model, state, mstate, taskIndex))
+    def chooseSubPolicy(self, model, state, mstate, taskIndex, prev_act, prev_weight):
+        cur_subpolicy, macro_vpred = self.policy.act(self.stochastic, self.makeOb(model, state, mstate, taskIndex), np.array([prev_act]), np.array([prev_weight]))
         return cur_subpolicy, macro_vpred
 
-    def traceBestSubPolicy(self, model, state, mstate, taskIndex, depth, goalIndex):
+    def traceBestSubPolicy(self, model, state, mstate, taskIndex, depth, goalIndex, prev_act, prev_weight):
         branches = 2
 
         initOb = self.makeOb(model, state, mstate, taskIndex)
@@ -327,7 +340,8 @@ class CurriculumTrainer(object):
             origSize = len(allPaths)
 
             obs = np.array([ path.obs[-1]  for path in allPaths ])
-            acts, vpreds = self.policy.getActs(obs)
+            prev_acts = np.array([ path.acts[-1] if len(path.acts) > 0 else prev_act for path in allPaths ])
+            acts, vpreds = self.policy.getActs(obs, prev_acts, np.fill((len(obs)), prev_weight))
             # print ("obs: ", obs)
             # print ("acts: ", acts)
 
@@ -509,7 +523,8 @@ class CurriculumTrainer(object):
                     # get enough samples for one training step
                     if i_iter != 0:
                         self.learner.syncMasterPolicies()
-                        self.learner.syncEnvModel()
+                        if self.config.trainer.use_env_model:
+                            self.learner.syncEnvModel()
 
                     while err is None:
                         i_iter += N_BATCH
@@ -522,6 +537,8 @@ class CurriculumTrainer(object):
                         macro_new_obs = []
                         # macro_rets = []
                         macro_acts = []
+                        macro_prev_acts = []
+                        prev_weights = []
                         macro_advs = []
                         macro_tdlamrets = []
                         trs = []
@@ -536,12 +553,15 @@ class CurriculumTrainer(object):
 
                                 ob = self.makeOb(model, tt.s1, tt.m1, tt.i)
                                 newOb = self.makeOb(model, tt.s2, tt.m2, tt.i)
-                                total_env_loss += self.env_model.getEnvLoss(tt.a, ob, newOb)
+                                if self.config.trainer.use_env_model:
+                                    total_env_loss += self.env_model.getEnvLoss(tt.a, ob, newOb)
                                 env_loss_count += 1
 
                                 macro_obs.append(ob) ## state, mstate
                                 macro_new_obs.append(newOb) ## state, mstate
                                 macro_acts.append(tt.a)
+                                macro_prev_acts.append(tt.prev_a)
+                                prev_weights.append(tt.prev_weight)
                                 # macro_rets.append(tt.r)
 
                             macro_adv, macro_tdlamret = add_advantage_macro(r, vpred, self.config.model.max_subtask_timesteps, 0.99, 0.98)
@@ -559,21 +579,19 @@ class CurriculumTrainer(object):
                         macro_new_obs = np.array(macro_new_obs)
                         # macro_rets = np.array(macro_rets)
                         macro_acts = np.array(macro_acts)
+                        macro_prev_acts = np.array(macro_prev_acts)
+                        prev_weights = np.array(prev_weights)
                         macro_advs = np.array(macro_advs)
                         macro_tdlamrets = np.array(macro_tdlamrets)
 
-                        gmean, lmean = self.learner.updateMasterPolicy(ep_lens, ep_rets, macro_obs, macro_acts, macro_advs, macro_tdlamrets)
-                        self.learner.updateEnvModel(macro_obs, macro_new_obs, macro_acts)
+                        gmean, lmean = self.learner.updateMasterPolicy(ep_lens, ep_rets, macro_obs, macro_acts, macro_prev_acts, prev_weights, macro_advs, macro_tdlamrets)
+                        if self.config.trainer.use_env_model:
+                            self.learner.updateEnvModel(macro_obs, macro_new_obs, macro_acts)
 
                         total_reward += reward
                         count += 1
-                        # for t in transitions:
-                        #     model.experience(t)
-                        # err = model.train()
                         err = 0
                     total_err += err
-
-                    # gmean, lmean = learner.updateMasterPolicy(rolls)
 
                 # log
                 logging.info("[step] %d", i_iter)

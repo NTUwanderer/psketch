@@ -34,9 +34,12 @@ class Learner:
         atarg = tf.placeholder(dtype=tf.float32, shape=[None]) # Target advantage function (if applicable)
         ret = tf.placeholder(dtype=tf.float32, shape=[None]) # Empirical return
 
+        prev_act = U.get_placeholder_cached(name="prev_act")
+        prev_weight = U.get_placeholder_cached(name="prev_weight")
+
         total_loss = self.policy_loss(policy, old_policy, ac, atarg, ret, clip_param)
         self.master_policy_var_list = policy.get_trainable_variables()
-        self.master_loss = U.function([ob, ac, atarg, ret], U.flatgrad(total_loss, self.master_policy_var_list))
+        self.master_loss = U.function([ob, ac, atarg, ret, prev_act, prev_weight], U.flatgrad(total_loss, self.master_policy_var_list))
         self.master_adam = MpiAdam(self.master_policy_var_list, comm=comm)
 
         self.assign_old_eq_new = U.function([],[], updates=[tf.assign(oldv, newv)
@@ -87,7 +90,7 @@ class Learner:
     def syncEnvModel(self):
         self.env_model_adam.sync()
 
-    def updateMasterPolicy(self, ep_lens, ep_rets, ob, ac, atarg, tdlamret):
+    def updateMasterPolicy(self, ep_lens, ep_rets, ob, ac, prev_ac, prev_weight, atarg, tdlamret):
         #ob, ac, atarg, tdlamret = seg["macro_ob"], seg["macro_ac"], seg["macro_adv"], seg["macro_tdlamret"]
         # ob = np.ones_like(ob)
         mean = atarg.mean()
@@ -101,7 +104,7 @@ class Learner:
 
         atarg = (atarg - global_mean) / max(global_std, 0.000001)
 
-        d = Dataset(dict(ob=ob, ac=ac, atarg=atarg, vtarg=tdlamret), shuffle=True)
+        d = Dataset(dict(ob=ob, ac=ac, atarg=atarg, vtarg=tdlamret, prev_ac=prev_ac, prev_weight=prev_weight), shuffle=True)
         optim_batchsize = min(self.optim_batchsize,ob.shape[0])
 
         self.policy.ob_rms.update(ob) # update running mean/std for policy
@@ -109,7 +112,7 @@ class Learner:
         self.assign_old_eq_new()
         for _ in range(self.optim_epochs):
             for batch in d.iterate_once(optim_batchsize):
-                g = self.master_loss(batch["ob"], batch["ac"], batch["atarg"], batch["vtarg"])
+                g = self.master_loss(batch["ob"], batch["ac"], batch["atarg"], batch["vtarg"], batch["prev_ac"], batch["prev_weight"])
                 self.master_adam.update(g, 0.01, 1)
 
         # lrlocal = (seg["ep_lens"], seg["ep_rets"]) # local values
